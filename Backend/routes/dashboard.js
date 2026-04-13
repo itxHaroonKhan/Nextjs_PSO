@@ -1,41 +1,48 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { store } = require('../dataStore');
 
 // ===============================
 // DASHBOARD STATS
 // ===============================
 router.get('/stats', (req, res) => {
-  const statsQuery = `
-    SELECT
-      (SELECT IFNULL(SUM(final_total),0) FROM sales WHERE DATE(created_at) = CURDATE()) AS todayRevenue,
-      (SELECT COUNT(*) FROM sales WHERE DATE(created_at) = CURDATE()) AS todaySales,
-      (SELECT COUNT(*) FROM customers) AS totalCustomers,
-      (SELECT COUNT(*) FROM products WHERE stock <= threshold) AS lowStock,
-      (SELECT IFNULL(SUM(final_total),0) FROM sales WHERE WEEK(created_at) = WEEK(CURDATE())) AS weekRevenue,
-      (SELECT IFNULL(SUM(final_total),0) FROM sales WHERE MONTH(created_at) = MONTH(CURDATE())) AS monthRevenue
-  `;
+  const today = new Date().toISOString().split('T')[0];
+  const todayStart = new Date(today).getTime();
 
-  db.query(statsQuery, (err, result) => {
-    if (err) {
-      console.error('Dashboard stats error:', err.message);
-      return res.json({
-        success: true,
-        data: {
-          todayRevenue: 0,
-          todaySales: 0,
-          totalCustomers: 0,
-          lowStock: 0,
-          weekRevenue: 0,
-          monthRevenue: 0
-        }
-      });
+  const todaySales = store.sales.filter(s => {
+    const saleDate = new Date(s.created_at).getTime();
+    return saleDate >= todayStart;
+  });
+
+  const todayRevenue = todaySales.reduce((sum, s) => sum + s.final_total, 0);
+  const todaySalesCount = todaySales.length;
+  const totalCustomers = store.customers.length;
+  const lowStock = store.products.filter(p => p.stock <= p.threshold).length;
+
+  // Week revenue
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekRevenue = store.sales
+    .filter(s => new Date(s.created_at) >= weekAgo)
+    .reduce((sum, s) => sum + s.final_total, 0);
+
+  // Month revenue
+  const monthAgo = new Date();
+  monthAgo.setMonth(monthAgo.getMonth() - 1);
+  const monthRevenue = store.sales
+    .filter(s => new Date(s.created_at) >= monthAgo)
+    .reduce((sum, s) => sum + s.final_total, 0);
+
+  res.json({
+    success: true,
+    data: {
+      todayRevenue,
+      todaySales: todaySalesCount,
+      totalCustomers,
+      lowStock,
+      weekRevenue,
+      monthRevenue
     }
-
-    res.json({
-      success: true,
-      data: result[0]
-    });
   });
 });
 
@@ -43,29 +50,23 @@ router.get('/stats', (req, res) => {
 // RECENT SALES
 // ===============================
 router.get('/recent-sales', (req, res) => {
-  const query = `
-    SELECT
-      s.id,
-      s.final_total AS grand_total,
-      s.payment_method,
-      s.created_at AS sale_date,
-      c.name AS customer_name
-    FROM sales s
-    LEFT JOIN customers c ON s.customer_id = c.id
-    ORDER BY s.id DESC
-    LIMIT 5
-  `;
+  const recentSales = store.sales
+    .map(sale => {
+      const customer = store.customers.find(c => c.id === sale.customer_id);
+      return {
+        id: sale.id,
+        final_total: sale.final_total,
+        payment_method: sale.payment_method,
+        created_at: sale.created_at,
+        customer_name: customer ? customer.name : 'Walk-in Customer'
+      };
+    })
+    .sort((a, b) => b.id - a.id)
+    .slice(0, 5);
 
-  db.query(query, (err, result) => {
-    if (err) {
-      console.error('Recent sales error:', err.message);
-      return res.json({ success: true, data: [] });
-    }
-
-    res.json({
-      success: true,
-      data: result
-    });
+  res.json({
+    success: true,
+    data: recentSales
   });
 });
 
@@ -73,28 +74,30 @@ router.get('/recent-sales', (req, res) => {
 // TOP CATEGORIES
 // ===============================
 router.get('/top-categories', (req, res) => {
-  const query = `
-    SELECT
-      p.category,
-      SUM(si.quantity) AS total_items_sold,
-      SUM(si.quantity * si.price) AS total_revenue
-    FROM sale_items si
-    JOIN products p ON si.product_id = p.id
-    GROUP BY p.category
-    ORDER BY total_revenue DESC
-    LIMIT 5
-  `;
+  const categoryMap = {};
 
-  db.query(query, (err, result) => {
-    if (err) {
-      console.error('Top categories error:', err.message);
-      return res.json({ success: true, data: [] });
+  store.sale_items.forEach(si => {
+    const product = store.products.find(p => p.id === si.product_id);
+    if (product) {
+      if (!categoryMap[product.category]) {
+        categoryMap[product.category] = {
+          category: product.category,
+          total_items_sold: 0,
+          total_revenue: 0
+        };
+      }
+      categoryMap[product.category].total_items_sold += si.quantity;
+      categoryMap[product.category].total_revenue += si.quantity * si.price;
     }
+  });
 
-    res.json({
-      success: true,
-      data: result
-    });
+  const categories = Object.values(categoryMap)
+    .sort((a, b) => b.total_revenue - a.total_revenue)
+    .slice(0, 5);
+
+  res.json({
+    success: true,
+    data: categories
   });
 });
 
@@ -102,49 +105,30 @@ router.get('/top-categories', (req, res) => {
 // AI INSIGHTS
 // ===============================
 router.get('/insights', (req, res) => {
-  const query = `
-    SELECT name, stock, threshold
-    FROM products
-    WHERE stock <= threshold
-    LIMIT 3
-  `;
+  const lowStockProducts = store.products
+    .filter(p => p.stock <= p.threshold)
+    .slice(0, 3);
 
-  db.query(query, (err, result) => {
-    if (err) {
-      console.error('AI insights error:', err.message);
-      return res.json({
-        success: true,
-        data: [
-          {
-            type: 'info',
-            title: 'System Running',
-            message: 'POS system is working. Connect database for real-time insights.'
-          }
-        ]
-      });
+  const insights = [
+    {
+      type: 'info',
+      title: 'System Running',
+      message: 'POS system is working fine'
     }
+  ];
 
-    const insights = [
-      {
-        type: 'info',
-        title: 'System Running',
-        message: 'POS system is working fine'
-      }
-    ];
-
-    if (result.length > 0) {
-      insights.push({
-        type: 'warning',
-        title: 'Low Stock Alert',
-        message: 'Some products are low in stock',
-        items: result
-      });
-    }
-
-    res.json({
-      success: true,
-      data: insights
+  if (lowStockProducts.length > 0) {
+    insights.push({
+      type: 'warning',
+      title: 'Low Stock Alert',
+      message: 'Some products are low in stock',
+      items: lowStockProducts
     });
+  }
+
+  res.json({
+    success: true,
+    data: insights
   });
 });
 

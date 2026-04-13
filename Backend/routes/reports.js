@@ -1,138 +1,116 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { store } = require('../dataStore');
 
 // ===============================
 // SALES PERFORMANCE
 // ===============================
-router.get('/sales-performance', async (req, res) => {
-  try {
-    const [rows] = await db.promise().query(`
-      SELECT
-        DAYNAME(created_at) as day,
-        SUM(final_total) as revenue
-      FROM sales
-      WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-      GROUP BY DAYNAME(created_at)
-    `);
+router.get('/sales-performance', (req, res) => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
 
-    res.json({ success: true, data: rows });
-  } catch (err) {
-    console.error('Sales performance error:', err.message);
-    res.json({ success: true, data: [] });
-  }
+  const salesByDay = {};
+
+  store.sales
+    .filter(s => new Date(s.created_at) >= weekAgo)
+    .forEach(s => {
+      const dayName = days[new Date(s.created_at).getDay()];
+      if (!salesByDay[dayName]) {
+        salesByDay[dayName] = { day: dayName, revenue: 0 };
+      }
+      salesByDay[dayName].revenue += s.final_total;
+    });
+
+  res.json({ success: true, data: Object.values(salesByDay) });
 });
 
 // ===============================
 // CATEGORY DISTRIBUTION
 // ===============================
-router.get('/category-distribution', async (req, res) => {
-  try {
-    const [rows] = await db.promise().query(`
-      SELECT
-        p.category as name,
-        SUM(si.quantity * si.price) as value
-      FROM sale_items si
-      JOIN products p ON si.product_id = p.id
-      GROUP BY p.category
-    `);
+router.get('/category-distribution', (req, res) => {
+  const categoryMap = {};
 
-    res.json({ success: true, data: rows });
-  } catch (err) {
-    console.error('Category distribution error:', err.message);
-    res.json({ success: true, data: [] });
-  }
+  store.sale_items.forEach(si => {
+    const product = store.products.find(p => p.id === si.product_id);
+    if (product) {
+      if (!categoryMap[product.category]) {
+        categoryMap[product.category] = { name: product.category, value: 0 };
+      }
+      categoryMap[product.category].value += si.quantity * si.price;
+    }
+  });
+
+  res.json({ success: true, data: Object.values(categoryMap) });
 });
 
 // ===============================
 // TAX SUMMARY
 // ===============================
-router.get('/tax-summary', async (req, res) => {
-  try {
-    const [rows] = await db.promise().query(`
-      SELECT
-        SUM(final_total) as total_taxable_amount,
-        SUM(tax) as total_tax
-      FROM sales
-    `);
+router.get('/tax-summary', (req, res) => {
+  const totalTax = store.sales.reduce((sum, s) => sum + s.tax, 0);
+  const totalTaxableAmount = store.sales.reduce((sum, s) => sum + s.final_total, 0);
 
-    const total_tax = rows[0]?.total_tax || 0;
-
-    res.json({
-      success: true,
-      data: {
-        total_taxable_amount: rows[0]?.total_taxable_amount || 0,
-        cgst: total_tax / 2,
-        sgst: total_tax / 2,
-        total_tax: total_tax
-      }
-    });
-  } catch (err) {
-    console.error('Tax summary error:', err.message);
-    res.json({
-      success: true,
-      data: { total_taxable_amount: 0, cgst: 0, sgst: 0, total_tax: 0 }
-    });
-  }
+  res.json({
+    success: true,
+    data: {
+      total_taxable_amount: totalTaxableAmount,
+      cgst: totalTax / 2,
+      sgst: totalTax / 2,
+      total_tax: totalTax
+    }
+  });
 });
 
 // ===============================
 // PROFIT & LOSS
 // ===============================
-router.get('/profit-loss', async (req, res) => {
-  try {
-    const [rows] = await db.promise().query(`
-      SELECT
-        SUM(si.price * si.quantity) as total_revenue,
-        SUM(p.cost_price * si.quantity) as total_cost
-      FROM sale_items si
-      JOIN products p ON si.product_id = p.id
-    `);
+router.get('/profit-loss', (req, res) => {
+  let totalRevenue = 0;
+  let totalCost = 0;
 
-    const revenue = rows[0]?.total_revenue || 0;
-    const cost = rows[0]?.total_cost || 0;
-    const profit = revenue - cost;
+  store.sale_items.forEach(si => {
+    const product = store.products.find(p => p.id === si.product_id);
+    if (product) {
+      totalRevenue += si.price * si.quantity;
+      totalCost += product.cost_price * si.quantity;
+    }
+  });
 
-    res.json({
-      success: true,
-      data: {
-        total_revenue: revenue,
-        total_cost: cost,
-        gross_profit: profit,
-        profit_margin: revenue ? (profit / revenue) * 100 : 0,
-        net_profit: profit
-      }
-    });
-  } catch (err) {
-    console.error('Profit/loss error:', err.message);
-    res.json({
-      success: true,
-      data: { total_revenue: 0, total_cost: 0, gross_profit: 0, profit_margin: 0, net_profit: 0 }
-    });
-  }
+  const profit = totalRevenue - totalCost;
+
+  res.json({
+    success: true,
+    data: {
+      total_revenue: totalRevenue,
+      total_cost: totalCost,
+      gross_profit: profit,
+      profit_margin: totalRevenue ? (profit / totalRevenue) * 100 : 0,
+      net_profit: profit
+    }
+  });
 });
 
 // ===============================
 // DAILY SALES REPORT
 // ===============================
-router.get('/daily-sales', async (req, res) => {
-  try {
-    const [rows] = await db.promise().query(`
-      SELECT
-        DATE(created_at) as date,
-        COUNT(*) as sales_count,
-        SUM(final_total) as revenue
-      FROM sales
-      GROUP BY DATE(created_at)
-      ORDER BY date DESC
-      LIMIT 7
-    `);
+router.get('/daily-sales', (req, res) => {
+  const salesByDate = {};
 
-    res.json({ success: true, data: rows });
-  } catch (err) {
-    console.error('Daily sales error:', err.message);
-    res.json({ success: true, data: [] });
-  }
+  store.sales.forEach(s => {
+    const date = new Date(s.created_at).toISOString().split('T')[0];
+    if (!salesByDate[date]) {
+      salesByDate[date] = { date, sales_count: 0, revenue: 0 };
+    }
+    salesByDate[date].sales_count += 1;
+    salesByDate[date].revenue += s.final_total;
+  });
+
+  const dailySales = Object.values(salesByDate)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 7);
+
+  res.json({ success: true, data: dailySales });
 });
 
 module.exports = router;

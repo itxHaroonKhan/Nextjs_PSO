@@ -1,6 +1,6 @@
 # Elites POS System - Backend API
 
-Simple Express.js backend API with mock data (no database, no authentication).
+Express.js backend API with in-memory data storage.
 
 ## Quick Start
 
@@ -19,20 +19,18 @@ npm run dev
 npm start
 ```
 
-Server will start on: **http://localhost:8000**
+Server will start on: **http://localhost:5001**
 
 ---
 
 ## 📡 API Endpoints
 
-### **Dashboard** - `/api/dashboard`
-- `GET /api/dashboard/stats` - Get dashboard statistics
-- `GET /api/dashboard/recent-sales` - Get recent sales
-- `GET /api/dashboard/top-categories` - Get top categories
-- `GET /api/dashboard/insights` - Get AI insights
+### **Authentication** - `/api/auth`
+- `POST /api/auth/login` - Login
+- `POST /api/auth/create-cashier` - Create cashier (Admin only)
 
 ### **Products** - `/api/products`
-- `GET /api/products` - Get all products (with pagination, search, filter)
+- `GET /api/products` - Get all products (with search, filter)
 - `GET /api/products/:id` - Get single product
 - `POST /api/products` - Create new product
 - `PUT /api/products/:id` - Update product
@@ -40,18 +38,23 @@ Server will start on: **http://localhost:8000**
 - `GET /api/products/categories/list` - Get all categories
 
 ### **Customers** - `/api/customers`
-- `GET /api/customers` - Get all customers (with pagination, search)
+- `GET /api/customers` - Get all customers
 - `GET /api/customers/:id` - Get single customer
-- `GET /api/customers/:id/history` - Get customer with purchase history
 - `POST /api/customers` - Create new customer
 - `PUT /api/customers/:id` - Update customer
 - `DELETE /api/customers/:id` - Delete customer
 
 ### **Sales** - `/api/sales`
-- `GET /api/sales` - Get all sales (with pagination, filter)
-- `GET /api/sales/:id` - Get single sale with items
+- `GET /api/sales` - Get all sales (Admin only)
+- `GET /api/sales/:id` - Get single sale with items (Admin only)
 - `POST /api/sales` - Create new sale (POS checkout)
-- `PUT /api/sales/:id/cancel` - Cancel/refund sale
+- `PUT /api/sales/:id/cancel` - Cancel/refund sale (Admin only)
+
+### **Dashboard** - `/api/dashboard`
+- `GET /api/dashboard/stats` - Get dashboard statistics
+- `GET /api/dashboard/recent-sales` - Get recent sales
+- `GET /api/dashboard/top-categories` - Get top categories
+- `GET /api/dashboard/insights` - Get AI insights
 
 ### **Reports** - `/api/reports`
 - `GET /api/reports/sales-performance` - Get sales performance chart data
@@ -59,6 +62,11 @@ Server will start on: **http://localhost:8000**
 - `GET /api/reports/tax-summary` - Get tax summary (GST breakdown)
 - `GET /api/reports/profit-loss` - Get profit and loss report
 - `GET /api/reports/daily-sales` - Get daily sales report
+
+### **Menu** - `/api/menu`
+- `GET /api/menu` - Get all menu items
+- `GET /api/menu/categories` - Get menu categories
+- `PUT /api/menu/:id/stock` - Update menu item stock
 
 ### **Settings** - `/api/settings`
 - `GET /api/settings` - Get all settings
@@ -68,18 +76,17 @@ Server will start on: **http://localhost:8000**
 
 ---
 
-## 📝 Query Parameters
+## 🔐 Authentication
 
-### Pagination
-All list endpoints support:
-- `page` - Page number (default: 1)
-- `limit` - Items per page (default: 20)
+Most endpoints require JWT authentication. Include the token in the Authorization header:
 
-### Search & Filter
-- `search` - Search term
-- `category` - Filter by category (products)
-- `status` - Filter by status (active/inactive/all)
-- `payment_method` - Filter by payment method (sales)
+```
+Authorization: Bearer <token>
+```
+
+### Default Admin Credentials
+- Email: `admin@elites.com`
+- Password: `admin123`
 
 ---
 
@@ -96,64 +103,53 @@ All responses follow this format:
 
 ---
 
+## 📝 Query Parameters
+
+### Search & Filter
+- `search` - Search term
+- `category` - Filter by category (products, menu)
+
+---
+
 ## 🔧 Tech Stack
 - **Framework:** Express.js
-- **Data:** Mock data (in-memory)
-- **No Database**
-- **No Authentication**
+- **Authentication:** JWT + bcrypt
+- **Data Storage:** In-memory (no database)
+- **Role-based Access:** Admin & Cashier
 
 ---
 
 ## 📌 Example Requests
 
-### Get Products
+### Login
 ```bash
-curl http://localhost:3000/api/products
+curl -X POST http://localhost:5001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@elites.com",
+    "password": "admin123"
+  }'
 ```
 
-### Create Product
+### Get Products
 ```bash
-curl -X POST http://localhost:3000/api/products \
+curl http://localhost:5001/api/products
+```
+
+### Create Product (requires auth)
+```bash
+curl -X POST http://localhost:5001/api/products \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
     "name": "New Product",
     "category": "Electronics",
     "sku": "TEST001",
     "selling_price": 999,
     "cost_price": 500,
-    "current_stock": 50
+    "stock": 50
   }'
 ```
-
-### Create Sale
-```bash
-curl -X POST http://localhost:3000/api/sales \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customer_id": 1,
-    "items": [
-      {
-        "product_id": 1,
-        "product_name": "Wireless Mouse",
-        "quantity": 2,
-        "price": 599,
-        "tax_rate": 18
-      }
-    ],
-    "discount": 50,
-    "payment_method": "cash",
-    "amount_paid": 1500
-  }'
-```
-
----
-
-## 🎯 Next Steps
-1. Connect to MySQL database
-2. Add JWT authentication
-3. Add role-based access control
-4. Add data validation
-5. Add file upload for receipts
 
 ---
 

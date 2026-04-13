@@ -1,23 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { store, getNextId } = require('../dataStore');
 
 // ===============================
 // GET ALL CUSTOMERS
 // ===============================
 router.get('/', (req, res) => {
-  const sql = "SELECT * FROM customers";
-
-  db.query(sql, (err, result) => {
-    if (err) {
-      console.error('Fetch customers error:', err.message);
-      return res.json({ success: true, data: [] });
-    }
-
-    res.json({
-      success: true,
-      data: result
-    });
+  res.json({
+    success: true,
+    data: store.customers
   });
 });
 
@@ -25,20 +16,13 @@ router.get('/', (req, res) => {
 // GET SINGLE CUSTOMER
 // ===============================
 router.get('/:id', (req, res) => {
-  const sql = "SELECT * FROM customers WHERE id = ?";
+  const customer = store.customers.find(c => c.id === parseInt(req.params.id));
 
-  db.query(sql, [req.params.id], (err, result) => {
-    if (err) {
-      console.error('Fetch customer error:', err.message);
-      return res.status(500).json({ success: false, error: 'Failed to fetch customer' });
-    }
+  if (!customer) {
+    return res.status(404).json({ success: false, message: "Customer not found" });
+  }
 
-    if (result.length === 0) {
-      return res.status(404).json({ success: false, message: "Customer not found" });
-    }
-
-    res.json({ success: true, data: result[0] });
-  });
+  res.json({ success: true, data: customer });
 });
 
 // ===============================
@@ -54,26 +38,24 @@ router.post('/', (req, res) => {
     });
   }
 
-  const sql = `
-    INSERT INTO customers
-    (name, email, phone, address, city, pincode, gst_number, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-  `;
+  const newCustomer = {
+    id: getNextId('customers'),
+    name,
+    email: email || '',
+    phone: phone || '',
+    address: address || '',
+    city: city || '',
+    pincode: pincode || '',
+    gst_number: gst_number || '',
+    total_spent: 0
+  };
 
-  db.query(sql, [name, email, phone, address, city, pincode, gst_number], (err, result) => {
-    if (err) {
-      console.error('Create customer error:', err.message);
-      return res.status(500).json({ success: false, error: 'Failed to create customer' });
-    }
+  store.customers.push(newCustomer);
 
-    // Return the created customer
-    db.query("SELECT * FROM customers WHERE id = ?", [result.insertId], (err2, rows) => {
-      res.json({
-        success: true,
-        message: "Customer added successfully",
-        data: rows[0] || { id: result.insertId, name, email, phone, address, city, pincode, gst_number }
-      });
-    });
+  res.json({
+    success: true,
+    message: "Customer added successfully",
+    data: newCustomer
   });
 });
 
@@ -90,26 +72,27 @@ router.put('/:id', (req, res) => {
     });
   }
 
-  const sql = `
-    UPDATE customers
-    SET name=?, email=?, phone=?, address=?, city=?, pincode=?, gst_number=?
-    WHERE id=?
-  `;
+  const customerIndex = store.customers.findIndex(c => c.id === parseInt(req.params.id));
 
-  db.query(sql, [name, email, phone, address, city, pincode, gst_number, req.params.id], (err) => {
-    if (err) {
-      console.error('Update customer error:', err.message);
-      return res.status(500).json({ success: false, error: 'Failed to update customer' });
-    }
+  if (customerIndex === -1) {
+    return res.status(404).json({ success: false, message: "Customer not found" });
+  }
 
-    // Return the updated customer
-    db.query("SELECT * FROM customers WHERE id = ?", [req.params.id], (err2, rows) => {
-      res.json({
-        success: true,
-        message: "Customer updated successfully",
-        data: rows[0] || { id: req.params.id, name, email, phone, address, city, pincode, gst_number }
-      });
-    });
+  store.customers[customerIndex] = {
+    ...store.customers[customerIndex],
+    name,
+    email,
+    phone,
+    address,
+    city,
+    pincode,
+    gst_number
+  };
+
+  res.json({
+    success: true,
+    message: "Customer updated successfully",
+    data: store.customers[customerIndex]
   });
 });
 
@@ -117,18 +100,17 @@ router.put('/:id', (req, res) => {
 // DELETE CUSTOMER
 // ===============================
 router.delete('/:id', (req, res) => {
-  const sql = "DELETE FROM customers WHERE id=?";
+  const customerIndex = store.customers.findIndex(c => c.id === parseInt(req.params.id));
 
-  db.query(sql, [req.params.id], (err) => {
-    if (err) {
-      console.error('Delete customer error:', err.message);
-      return res.status(500).json({ success: false, error: 'Failed to delete customer' });
-    }
+  if (customerIndex === -1) {
+    return res.status(404).json({ success: false, message: "Customer not found" });
+  }
 
-    res.json({
-      success: true,
-      message: "Customer deleted successfully"
-    });
+  store.customers.splice(customerIndex, 1);
+
+  res.json({
+    success: true,
+    message: "Customer deleted successfully"
   });
 });
 

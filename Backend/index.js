@@ -2,8 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 
-const db = require('./db');
-
 dotenv.config();
 
 const app = express();
@@ -13,10 +11,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ AUTH ROUTE (ALWAYS TOP)
+// ROUTES
 app.use('/api/auth', require('./routes/auth'));
-
-// ✅ PROTECTED ROUTES
 app.use('/api/products', require('./routes/products'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/sales', require('./routes/sales'));
@@ -42,7 +38,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// 404 Handler - Undefined routes
+// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,

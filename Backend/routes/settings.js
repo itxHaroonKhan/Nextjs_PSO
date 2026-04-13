@@ -1,126 +1,79 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { store } = require('../dataStore');
 
 // ===============================
 // GET SETTINGS
 // ===============================
-router.get('/', async (req, res) => {
-  try {
-    const [rows] = await db.promise().query(`SELECT * FROM settings LIMIT 1`);
-
-    res.json({
-      success: true,
-      data: rows[0] || {}
-    });
-  } catch (err) {
-    console.error('Fetch settings error:', err.message);
-    res.status(500).json({ success: false, message: 'Error fetching settings' });
-  }
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    data: store.settings
+  });
 });
 
 // ===============================
 // UPDATE SETTINGS
 // ===============================
-router.put('/', async (req, res) => {
-  try {
-    const data = req.body;
+router.put('/', (req, res) => {
+  const data = req.body;
 
-    await db.promise().query(`
-      UPDATE settings SET
-        store_name = ?,
-        store_address = ?,
-        store_phone = ?,
-        store_email = ?,
-        store_gstin = ?,
-        currency = ?,
-        tax_rate = ?,
-        items_per_page = ?,
-        theme = ?,
-        invoice_prefix = ?,
-        low_stock_alert = ?
-      WHERE id = 1
-    `, [
-      data.store_name,
-      data.store_address,
-      data.store_phone,
-      data.store_email,
-      data.store_gstin,
-      data.currency,
-      data.tax_rate,
-      data.items_per_page,
-      data.theme,
-      data.invoice_prefix,
-      data.low_stock_alert
-    ]);
+  store.settings = {
+    ...store.settings,
+    store_name: data.store_name || store.settings.store_name,
+    store_address: data.store_address || store.settings.store_address,
+    store_phone: data.store_phone || store.settings.store_phone,
+    store_email: data.store_email || store.settings.store_email,
+    store_gstin: data.store_gstin !== undefined ? data.store_gstin : store.settings.store_gstin,
+    currency: data.currency || store.settings.currency,
+    tax_rate: data.tax_rate !== undefined ? data.tax_rate : store.settings.tax_rate,
+    items_per_page: data.items_per_page || store.settings.items_per_page,
+    theme: data.theme || store.settings.theme,
+    invoice_prefix: data.invoice_prefix || store.settings.invoice_prefix,
+    low_stock_alert: data.low_stock_alert !== undefined ? data.low_stock_alert : store.settings.low_stock_alert
+  };
 
-    res.json({
-      success: true,
-      message: 'Settings updated successfully'
-    });
-  } catch (err) {
-    console.error('Update settings error:', err.message);
-    res.status(500).json({ success: false, message: 'Error updating settings' });
-  }
+  res.json({
+    success: true,
+    message: 'Settings updated successfully'
+  });
 });
 
 // ===============================
 // GET STORE INFO
 // ===============================
-router.get('/store', async (req, res) => {
-  try {
-    const [rows] = await db.promise().query(`
-      SELECT
-        store_name,
-        store_address,
-        store_phone,
-        store_email,
-        store_gstin
-      FROM settings
-      LIMIT 1
-    `);
-
-    res.json({
-      success: true,
-      data: rows[0] || {}
-    });
-  } catch (err) {
-    console.error('Fetch store info error:', err.message);
-    res.status(500).json({ success: false, message: 'Error fetching store info' });
-  }
+router.get('/store', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      store_name: store.settings.store_name,
+      store_address: store.settings.store_address,
+      store_phone: store.settings.store_phone,
+      store_email: store.settings.store_email,
+      store_gstin: store.settings.store_gstin
+    }
+  });
 });
 
 // ===============================
 // UPDATE STORE INFO
 // ===============================
-router.put('/store', async (req, res) => {
-  try {
-    const data = req.body;
+router.put('/store', (req, res) => {
+  const data = req.body;
 
-    await db.promise().query(`
-      UPDATE settings SET
-        store_name = ?,
-        store_address = ?,
-        store_phone = ?,
-        store_email = ?,
-        store_gstin = ?
-      WHERE id = 1
-    `, [
-      data.store_name,
-      data.store_address,
-      data.store_phone,
-      data.store_email,
-      data.store_gstin
-    ]);
+  store.settings = {
+    ...store.settings,
+    store_name: data.store_name || store.settings.store_name,
+    store_address: data.store_address || store.settings.store_address,
+    store_phone: data.store_phone || store.settings.store_phone,
+    store_email: data.store_email || store.settings.store_email,
+    store_gstin: data.store_gstin !== undefined ? data.store_gstin : store.settings.store_gstin
+  };
 
-    res.json({
-      success: true,
-      message: 'Store info updated successfully'
-    });
-  } catch (err) {
-    console.error('Update store info error:', err.message);
-    res.status(500).json({ success: false, message: 'Error updating store info' });
-  }
+  res.json({
+    success: true,
+    message: 'Store info updated successfully'
+  });
 });
 
 module.exports = router;
