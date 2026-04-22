@@ -1,0 +1,16 @@
+{
+  "placeholderImages": [
+    {
+      "id": "logo",
+      "description": "NexusSales POS Logo",
+      "imageUrl": "https://picsum.photos/seed/nexus/200/200",
+      "imageHint": "logo abstract"
+    },
+    {
+      "id": "avatar-admin",
+      "description": "Admin User Avatar",
+      "imageUrl": "https://picsum.photos/seed/admin/100/100",
+      "imageHint": "professional man"
+    }
+  ]
+}
