@@ -1,87 +1,149 @@
 const express = require('express');
 const router = express.Router();
-const { store, getNextId } = require('../dataStore');
+const db = require('../db');
+
+// 🔐 Middleware
+const verifyToken = require('../middleware/authMiddleware');
+const checkRole = require('../middleware/roleMiddleware');
 
 // ===============================
-// GET ALL MENU ITEMS
+// APPLY AUTH
 // ===============================
-router.get('/', (req, res) => {
-  const { search = '', category = '' } = req.query;
+router.use(verifyToken);
 
-  let items = [...store.menu_items];
+// ===============================
+// GET ALL MENU ITEMS (Admin + Cashier)
+// ===============================
+router.get('/', checkRole(['admin', 'cashier']), async (req, res) => {
+  try {
+    const { search = '', category = '' } = req.query;
 
-  if (search) {
-    const searchLower = search.toLowerCase();
-    items = items.filter(item =>
-      item.name.toLowerCase().includes(searchLower) ||
-      item.category.toLowerCase().includes(searchLower)
-    );
-  }
+    // Fetch from products table instead of menu_items
+    let sql = "SELECT id, name, category, selling_price AS price, stock, description, sku, image FROM products WHERE 1=1";
+    let values = [];
 
-  if (category && category !== 'all') {
-    items = items.filter(item => item.category === category);
-  }
-
-  res.json({
-    success: true,
-    data: {
-      items
+    if (search) {
+      sql += " AND (name LIKE ? OR category LIKE ?)";
+      values.push(`%${search}%`, `%${search}%`);
     }
-  });
-});
 
-// ===============================
-// GET CATEGORIES
-// ===============================
-router.get('/categories', (req, res) => {
-  const categories = [...new Set(store.menu_items.map(item => item.category))];
+    if (category && category !== 'all') {
+      sql += " AND category = ?";
+      values.push(category);
+    }
 
-  res.json({
-    success: true,
-    data: categories
-  });
-});
+    sql += " ORDER BY id DESC";
 
-// ===============================
-// UPDATE STOCK
-// ===============================
-router.put('/:id/stock', (req, res) => {
-  const { id } = req.params;
-  const { quantity, operation } = req.body;
+    const [rows] = await db.query(sql, values);
 
-  if (!quantity || quantity < 0) {
-    return res.status(400).json({
+    res.json({
+      success: true,
+      data: {
+        items: rows
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
       success: false,
-      message: "Valid quantity required"
+      message: "Error fetching menu items"
     });
   }
+});
 
-  const itemIndex = store.menu_items.findIndex(item => item.id === parseInt(id));
+// ===============================
+// GET CATEGORIES (Admin + Cashier)
+// ===============================
+router.get('/categories', checkRole(['admin', 'cashier']), async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category != ''"
+    );
 
-  if (itemIndex === -1) {
-    return res.status(404).json({ success: false, message: 'Item not found' });
+    res.json({
+      success: true,
+      data: rows
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching categories"
+    });
   }
+});
 
-  let newStock = store.menu_items[itemIndex].stock;
+// ===============================
+// UPDATE STOCK (Admin ONLY)
+// ===============================
+router.put('/:id/stock', checkRole(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { quantity, operation } = req.body;
 
-  if (operation === 'decrease') {
-    if (store.menu_items[itemIndex].stock < quantity) {
-      return res.status(400).json({ success: false, message: 'Insufficient stock' });
+    // ✅ Validation
+    if (quantity === undefined || quantity < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid quantity required"
+      });
     }
-    newStock -= quantity;
-  } else if (operation === 'increase') {
-    newStock += quantity;
-  } else {
-    newStock = quantity;
+
+    const [rows] = await db.query(
+      "SELECT stock FROM menu_items WHERE id = ?",
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Menu item not found"
+      });
+    }
+
+    let currentStock = rows[0].stock;
+    let newStock;
+
+    if (operation === 'decrease') {
+      if (currentStock < quantity) {
+        return res.status(400).json({
+          success: false,
+          message: "Insufficient stock"
+        });
+      }
+      newStock = currentStock - quantity;
+
+    } else if (operation === 'increase') {
+      newStock = currentStock + quantity;
+
+    } else {
+      // direct set
+      newStock = quantity;
+    }
+
+    await db.query(
+      "UPDATE menu_items SET stock = ? WHERE id = ?",
+      [newStock, id]
+    );
+
+    res.json({
+      success: true,
+      message: "Stock updated successfully",
+      data: {
+        id,
+        stock: newStock
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error updating stock"
+    });
   }
-
-  store.menu_items[itemIndex].stock = newStock;
-
-  res.json({
-    success: true,
-    message: "Stock updated successfully",
-    data: { id: parseInt(id), stock: newStock }
-  });
 });
 
 module.exports = router;

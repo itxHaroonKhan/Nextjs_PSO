@@ -1,21 +1,34 @@
-// Global Error Handler Middleware
-const errorHandler = (err, req, res, next) => {
-  const statusCode = err.status || 500;
-  const message = err.message || 'Internal server error';
+const errorMiddleware = (err, req, res, next) => {
+  console.error(err.stack);
 
-  res.status(statusCode).json({
+  // Mongoose validation error
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: err.message
+    });
+  }
+
+  // JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid token"
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      message: "Token expired"
+    });
+  }
+
+  // Default error
+  res.status(err.statusCode || 500).json({
     success: false,
-    message,
-    error: process.env.NODE_ENV === 'development' ? err.message : {}
+    message: err.message || "Internal server error"
   });
 };
 
-// 404 Handler
-const notFoundHandler = (req, res, next) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found'
-  });
-};
-
-module.exports = { errorHandler, notFoundHandler };
+module.exports = errorMiddleware;

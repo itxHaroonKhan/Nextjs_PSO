@@ -1,79 +1,200 @@
 const express = require('express');
 const router = express.Router();
-const { store } = require('../dataStore');
+const db = require('../db');
+
+// 🔐 Middleware
+const verifyToken = require('../middleware/authMiddleware');
+const checkRole = require('../middleware/roleMiddleware');
 
 // ===============================
-// GET SETTINGS
+// GET FULL SETTINGS (Admin ONLY)
 // ===============================
-router.get('/', (req, res) => {
-  res.json({
-    success: true,
-    data: store.settings
-  });
+router.get('/', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT * FROM settings WHERE id = 1");
+
+    res.json({
+      success: true,
+      data: rows[0] || {}
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching settings"
+    });
+  }
 });
 
 // ===============================
-// UPDATE SETTINGS
+// UPDATE FULL SETTINGS (Admin ONLY)
 // ===============================
-router.put('/', (req, res) => {
-  const data = req.body;
+router.put('/', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const updates = req.body;
 
-  store.settings = {
-    ...store.settings,
-    store_name: data.store_name || store.settings.store_name,
-    store_address: data.store_address || store.settings.store_address,
-    store_phone: data.store_phone || store.settings.store_phone,
-    store_email: data.store_email || store.settings.store_email,
-    store_gstin: data.store_gstin !== undefined ? data.store_gstin : store.settings.store_gstin,
-    currency: data.currency || store.settings.currency,
-    tax_rate: data.tax_rate !== undefined ? data.tax_rate : store.settings.tax_rate,
-    items_per_page: data.items_per_page || store.settings.items_per_page,
-    theme: data.theme || store.settings.theme,
-    invoice_prefix: data.invoice_prefix || store.settings.invoice_prefix,
-    low_stock_alert: data.low_stock_alert !== undefined ? data.low_stock_alert : store.settings.low_stock_alert
-  };
+    // ✅ Build dynamic update query
+    const fields = [];
+    const values = [];
+    const allowedFields = ['store_name', 'store_address', 'store_phone', 'store_email', 'store_gstin', 'currency', 'tax_rate', 'items_per_page', 'theme', 'invoice_prefix', 'low_stock_alert'];
 
-  res.json({
-    success: true,
-    message: 'Settings updated successfully'
-  });
-});
-
-// ===============================
-// GET STORE INFO
-// ===============================
-router.get('/store', (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      store_name: store.settings.store_name,
-      store_address: store.settings.store_address,
-      store_phone: store.settings.store_phone,
-      store_email: store.settings.store_email,
-      store_gstin: store.settings.store_gstin
+    for (const field of allowedFields) {
+      if (field in updates) {
+        fields.push(`${field} = ?`);
+        values.push(updates[field] === '' ? null : updates[field]);
+      }
     }
-  });
+
+    if (fields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No fields to update"
+      });
+    }
+
+    values.push(1);
+
+    const [result] = await db.query(
+      `UPDATE settings SET ${fields.join(', ')} WHERE id=?`,
+      values
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Settings not found"
+      });
+    }
+
+    // ✅ Fetch updated settings
+    const [updatedRows] = await db.query(
+      "SELECT * FROM settings WHERE id = 1"
+    );
+
+    res.json({
+      success: true,
+      message: "Settings updated successfully",
+      data: updatedRows[0]
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error updating settings"
+    });
+  }
 });
 
 // ===============================
-// UPDATE STORE INFO
+// GET STORE INFO (Admin + Cashier)
 // ===============================
-router.put('/store', (req, res) => {
-  const data = req.body;
+router.get('/store', verifyToken, checkRole(['admin', 'cashier']), async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT 
+        store_name,
+        store_address,
+        store_phone,
+        store_email,
+        store_gstin
+      FROM settings
+      WHERE id = 1
+    `);
 
-  store.settings = {
-    ...store.settings,
-    store_name: data.store_name || store.settings.store_name,
-    store_address: data.store_address || store.settings.store_address,
-    store_phone: data.store_phone || store.settings.store_phone,
-    store_email: data.store_email || store.settings.store_email,
-    store_gstin: data.store_gstin !== undefined ? data.store_gstin : store.settings.store_gstin
-  };
+    res.json({
+      success: true,
+      data: rows[0] || {}
+    });
 
-  res.json({
-    success: true,
-    message: 'Store info updated successfully'
-  });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching store info"
+    });
+  }
+});
+
+// ===============================
+// UPDATE STORE INFO (Admin ONLY)
+// ===============================
+router.put('/store', verifyToken, checkRole(['admin']), async (req, res) => {
+  try {
+    const {
+      store_name,
+      store_address,
+      store_phone,
+      store_email,
+      store_gstin
+    } = req.body;
+
+    await db.query(`
+      UPDATE settings SET 
+        store_name = ?, 
+        store_address = ?, 
+        store_phone = ?, 
+        store_email = ?, 
+        store_gstin = ?
+      WHERE id = 1
+    `, [
+      store_name,
+      store_address,
+      store_phone,
+      store_email,
+      store_gstin
+    ]);
+
+    res.json({
+      success: true,
+      message: "Store info updated successfully"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error updating store info"
+    });
+  }
+});
+
+// ===============================
+// RESET DASHBOARD DATA (Admin ONLY)
+// ===============================
+router.post('/reset-data', verifyToken, checkRole(['admin']), async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Clear sale items first (Foreign Key constraint)
+    await connection.query("DELETE FROM sale_items");
+    
+    // 2. Clear sales
+    await connection.query("DELETE FROM sales");
+
+    // Optional: Reset auto-increment
+    await connection.query("ALTER TABLE sale_items AUTO_INCREMENT = 1");
+    await connection.query("ALTER TABLE sales AUTO_INCREMENT = 1");
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: "All sales data has been reset to zero successfully."
+    });
+
+  } catch (err) {
+    await connection.rollback();
+    console.error('❌ Reset error:', err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to reset sales data"
+    });
+  } finally {
+    connection.release();
+  }
 });
 
 module.exports = router;

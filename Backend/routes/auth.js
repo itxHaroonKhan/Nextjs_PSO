@@ -1,143 +1,215 @@
 const express = require('express');
 const router = express.Router();
+const db = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+
+// 🔐 Middleware
 const verifyToken = require('../middleware/authMiddleware');
 const checkRole = require('../middleware/roleMiddleware');
-const { store, getNextId } = require('../dataStore');
 
-// CREATE CASHIER
+/**
+ * 🛠 Helper to ensure columns exist
+ */
+async function ensureUserColumns() {
+  try {
+    console.log('🔍 Checking users table structure...');
+    const [columns] = await db.query("SHOW COLUMNS FROM users");
+    const columnNames = columns.map(c => c.Field);
+
+    if (!columnNames.includes('permissions')) {
+      await db.query("ALTER TABLE users ADD COLUMN permissions TEXT");
+      console.log('✅ Added permissions column');
+    }
+    if (!columnNames.includes('failedAttempts')) {
+      await db.query("ALTER TABLE users ADD COLUMN failedAttempts INT DEFAULT 0");
+      console.log('✅ Added failedAttempts column');
+    }
+    if (!columnNames.includes('lockUntil')) {
+      await db.query("ALTER TABLE users ADD COLUMN lockUntil DATETIME NULL");
+      console.log('✅ Added lockUntil column');
+    }
+  } catch (err) {
+    console.warn('⚠️ Warning: Could not verify users table structure:', err.message);
+  }
+}
+
+// Run check on startup, but don't block
+ensureUserColumns().catch(e => console.error('Background check failed:', e));
+
+// ===============================
+// CREATE USER (Admin ONLY)
+// ===============================
 router.post(
   '/create-cashier',
   verifyToken,
   checkRole(['admin']),
   async (req, res) => {
     try {
-      const { name, email, password } = req.body;
+      let { name, email, password, role, permissions } = req.body;
+      console.log('📥 Registration request:', { name, email, role });
+
+      // Trim inputs
+      name = name?.trim();
+      email = email?.trim()?.toLowerCase();
+      password = password?.trim();
 
       if (!name || !email || !password) {
         return res.status(400).json({
           success: false,
-          message: 'Name, email, and password are required'
+          message: "Name, email, and password are required."
         });
       }
 
-      if (password.length < 6) {
-        return res.status(400).json({
-          success: false,
-          message: 'Password must be at least 6 characters'
-        });
-      }
+      // Check if user exists
+      const [existing] = await db.query(
+        "SELECT id FROM users WHERE email = ?",
+        [email]
+      );
 
-      // Check if email already exists
-      const existingUser = store.users.find(u => u.email === email);
-      if (existingUser) {
+      if (existing && existing.length > 0) {
         return res.status(400).json({
           success: false,
-          message: 'Email already exists'
+          message: "A user with this email already exists."
         });
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      const newUser = {
-        id: getNextId('users'),
-        name,
-        email,
-        password: hashedPassword,
-        role: 'cashier'
-      };
+      const userRole = role || 'cashier';
+      const userPermissions = JSON.stringify(permissions || []);
 
-      store.users.push(newUser);
+      await db.query(
+        "INSERT INTO users (name, email, password, role, permissions) VALUES (?, ?, ?, ?, ?)",
+        [name, email, hashedPassword, userRole, userPermissions]
+      );
 
       res.json({
         success: true,
-        message: "Cashier created successfully",
-        data: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role }
+        message: "User created successfully"
       });
+
     } catch (err) {
+      console.error('❌ Registration Error:', err);
       res.status(500).json({
         success: false,
-        message: 'Error creating cashier',
-        error: 'Internal server error'
+        message: "Registration failed",
+        error: err.message
       });
     }
   }
 );
 
-// LOGIN
+// ===============================
+// LOGIN (WITH LOCK SYSTEM)
+// ===============================
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+    
+    // Trim and normalize
+    email = email?.trim()?.toLowerCase();
+    password = password?.trim();
+
+    console.log('📥 Login attempt for:', email);
 
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required'
-      });
+      return res.status(400).json({ success: false, message: "Email and password required." });
     }
 
-    // Default admin login
-    if (email === 'admin@elites.com' && password === 'admin123') {
-      const token = jwt.sign(
-        { id: 1, role: 'admin', name: 'Admin' },
-        process.env.JWT_SECRET,
-        { expiresIn: "1d" }
-      );
+    // 1. Find user
+    console.log('🔍 Searching for user in DB...');
+    const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
 
-      return res.json({
-        success: true,
-        token,
-        user: {
-          id: 1,
-          name: 'Admin',
-          role: 'admin'
-        }
-      });
+    if (!rows || rows.length === 0) {
+      console.log('❌ User not found');
+      return res.status(400).json({ success: false, message: "Invalid email or password." });
     }
 
-    // Find user in memory
-    const user = store.users.find(u => u.email === email);
+    const user = rows[0];
+    console.log('✅ User found, ID:', user.id);
 
-    if (!user) {
-      return res.json({ success: false, message: "User not found" });
+    // 2. Check lock
+    if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
+      console.log('🔒 Account is locked');
+      return res.status(403).json({ success: false, message: "Account locked. Try again later." });
     }
 
-    try {
-      const isMatch = await bcrypt.compare(password, user.password);
+    // 3. Compare password
+    console.log('🔐 Comparing passwords...');
+    const isMatch = await bcrypt.compare(password, user.password);
 
-      if (!isMatch) {
-        return res.json({ success: false, message: "Invalid password" });
+    if (!isMatch) {
+      const attempts = (user.failedAttempts || 0) + 1;
+      console.log(`❌ Wrong password. Attempt: ${attempts}`);
+
+      if (attempts >= 3) {
+        await db.query("UPDATE users SET failedAttempts = ?, lockUntil = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE id = ?", [attempts, user.id]);
+        return res.status(403).json({ success: false, message: "Account locked for 30 mins." });
       }
-    } catch (compareErr) {
-      return res.status(500).json({
-        success: false,
-        message: 'Authentication error',
-        error: 'Internal server error'
-      });
+
+      await db.query("UPDATE users SET failedAttempts = ? WHERE id = ?", [attempts, user.id]);
+      return res.status(401).json({ success: false, message: `Invalid password (${attempts}/3).` });
     }
+
+    // 4. Success -> Reset failed attempts
+    console.log('✅ Password matched. Resetting attempts...');
+    await db.query("UPDATE users SET failedAttempts = 0, lockUntil = NULL WHERE id = ?", [user.id]);
+
+    // 5. Generate Token
+    console.log('🎟️ Generating JWT...');
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET is missing from .env');
+    }
+
+    const permissions = JSON.parse(user.permissions || '[]');
 
     const token = jwt.sign(
-      { id: user.id, role: user.role, name: user.name },
+      { id: user.id, role: user.role, permissions },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: '1d' }
     );
 
+    console.log('🚀 Login successful for:', email);
     res.json({
       success: true,
       token,
       user: {
         id: user.id,
         name: user.name,
-        role: user.role
+        role: user.role,
+        permissions
       }
     });
+
   } catch (err) {
-    console.error('Login error:', err);
+    console.error('❌ LOGIN CRASH:', err);
     res.status(500).json({
       success: false,
-      message: 'Login failed',
-      error: 'Internal server error'
+      message: "Server login error",
+      error: err.message
     });
+  }
+});
+
+// ===============================
+// GET PROFILE
+// ===============================
+router.get('/profile', verifyToken, async (req, res) => {
+  try {
+    const [rows] = await db.query("SELECT id, name, email, role, permissions FROM users WHERE id = ?", [req.user.id]);
+    if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: "User not found" });
+    
+    const user = rows[0];
+    res.json({ 
+      success: true, 
+      data: {
+        ...user,
+        permissions: JSON.parse(user.permissions || '[]')
+      } 
+    });
+  } catch (err) {
+    console.error('❌ Profile Error:', err);
+    res.status(500).json({ success: false, message: "Profile fetch failed", error: err.message });
   }
 });
 

@@ -1,176 +1,386 @@
 const express = require('express');
 const router = express.Router();
-const { store, getNextId } = require('../dataStore');
+const db = require('../db');
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
+const { Readable } = require('stream');
+
+// 🔐 Middleware
+const verifyToken = require('../middleware/authMiddleware');
+const checkRole = require('../middleware/roleMiddleware');
+
+// Multer setup for CSV
+const upload = multer({ storage: multer.memoryStorage() });
 
 // ===============================
-// GET ALL PRODUCTS
+// APPLY AUTH
 // ===============================
-router.get('/', (req, res) => {
-  const { search = '', category = '' } = req.query;
+router.use(verifyToken);
 
-  let products = [...store.products];
-
-  if (search) {
-    const searchLower = search.toLowerCase();
-    products = products.filter(p =>
-      p.name.toLowerCase().includes(searchLower) ||
-      p.sku.toLowerCase().includes(searchLower) ||
-      p.category.toLowerCase().includes(searchLower)
-    );
+// ===============================
+// BULK IMPORT PRODUCTS (Admin ONLY)
+// ===============================
+router.post('/bulk-import', checkRole(['admin']), upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
 
-  if (category) {
-    products = products.filter(p => p.category === category);
-  }
+  const results = [];
+  const stream = Readable.from(req.file.buffer.toString());
 
-  res.json({
-    success: true,
-    data: products
-  });
+  stream
+    .pipe(csv({
+      mapHeaders: ({ header }) => header.trim().replace(/^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/, '')
+    }))
+    .on('data', (data) => results.push(data))
+    .on('end', async () => {
+      const connection = await db.getConnection();
+      try {
+        await connection.beginTransaction();
+        
+        let importedCount = 0;
+        let errors = [];
+
+        for (const [index, row] of results.entries()) {
+          try {
+            const name = row.name || row.Name;
+            const category = row.category || row.Category;
+            const sku = row.sku || row.SKU;
+            const price = parseFloat(row.selling_price || row.price || row.Price || 0);
+            const cost = parseFloat(row.cost_price || row.cost || row.Cost || 0);
+            const stock = parseInt(row.stock || row.Stock || 0);
+            const threshold = parseInt(row.threshold || row.Threshold || 5);
+            const unit = row.unit_type || row.unit || 'pcs';
+
+            if (!name) {
+              errors.push(`Row ${index + 1}: Name is missing`);
+              continue;
+            }
+
+            // Check duplicate SKU in current DB
+            if (sku) {
+              const [existing] = await connection.query("SELECT id FROM products WHERE sku = ?", [sku]);
+              if (existing.length > 0) {
+                errors.push(`Row ${index + 1}: SKU ${sku} already exists`);
+                continue;
+              }
+            }
+
+            await connection.query(
+              `INSERT INTO products 
+              (name, category, sku, selling_price, cost_price, stock, threshold, unit_type, created_at) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+              [name, category, sku, price, cost, stock, threshold, unit]
+            );
+            importedCount++;
+          } catch (rowErr) {
+            errors.push(`Row ${index + 1}: ${rowErr.message}`);
+          }
+        }
+
+        await connection.commit();
+        res.json({
+          success: true,
+          message: `Successfully imported ${importedCount} products`,
+          totalRows: results.length,
+          errors: errors.length > 0 ? errors : null
+        });
+      } catch (err) {
+        await connection.rollback();
+        console.error('Bulk import error:', err);
+        res.status(500).json({ success: false, message: 'Internal server error during import' });
+      } finally {
+        connection.release();
+      }
+    });
 });
 
 // ===============================
-// GET CATEGORIES
+// GET ALL PRODUCTS (Admin + Cashier)
 // ===============================
-router.get('/categories/list', (req, res) => {
-  const categories = [...new Set(store.products.map(p => p.category))];
+router.get('/', checkRole(['admin', 'cashier']), async (req, res) => {
+  try {
+    const { search = '', category = '' } = req.query;
 
-  res.json({
-    success: true,
-    data: categories
-  });
+    let sql = "SELECT * FROM products WHERE 1=1";
+    let params = [];
+
+    if (search) {
+      sql += " AND (name LIKE ? OR sku LIKE ? OR category LIKE ?)";
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    if (category) {
+      sql += " AND category = ?";
+      params.push(category);
+    }
+
+    sql += " ORDER BY id DESC";
+
+    const [rows] = await db.query(sql, params);
+
+    res.json({
+      success: true,
+      data: rows
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching products"
+    });
+  }
 });
 
 // ===============================
 // GET SINGLE PRODUCT
 // ===============================
-router.get('/:id', (req, res) => {
-  const product = store.products.find(p => p.id === parseInt(req.params.id));
+router.get('/:id', checkRole(['admin', 'cashier']), async (req, res) => {
+  try {
+    const { id } = req.params;
 
-  if (!product) {
-    return res.status(404).json({ success: false, message: "Product not found" });
-  }
+    const [rows] = await db.query(
+      "SELECT * FROM products WHERE id = ?",
+      [id]
+    );
 
-  res.json({
-    success: true,
-    data: product
-  });
-});
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
 
-// ===============================
-// CREATE PRODUCT
-// ===============================
-router.post('/', (req, res) => {
-  const {
-    name,
-    category,
-    sku,
-    barcode,
-    description,
-    selling_price,
-    cost_price,
-    stock,
-    threshold,
-    unit_type
-  } = req.body;
+    res.json({
+      success: true,
+      data: rows[0]
+    });
 
-  if (!name || selling_price == null) {
-    return res.status(400).json({
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
       success: false,
-      message: 'Product name and selling price are required'
+      message: "Error fetching product"
     });
   }
-
-  const newProduct = {
-    id: getNextId('products'),
-    name,
-    category: category || '',
-    sku: sku || '',
-    barcode: barcode || '',
-    description: description || '',
-    selling_price,
-    cost_price: cost_price || 0,
-    stock: stock || 0,
-    threshold: threshold || 10,
-    unit_type: unit_type || 'pcs'
-  };
-
-  store.products.push(newProduct);
-
-  res.json({
-    success: true,
-    message: "Product created",
-    data: newProduct
-  });
 });
 
 // ===============================
-// UPDATE PRODUCT
+// CREATE PRODUCT (Admin ONLY)
 // ===============================
-router.put('/:id', (req, res) => {
-  const {
-    name,
-    category,
-    sku,
-    barcode,
-    description,
-    selling_price,
-    cost_price,
-    stock,
-    threshold,
-    unit_type
-  } = req.body;
+router.post('/', checkRole(['admin']), async (req, res) => {
+  try {
+    const {
+      name,
+      category,
+      sku,
+      barcode,
+      description,
+      selling_price,
+      cost_price,
+      stock,
+      threshold,
+      unit_type,
+      image
+    } = req.body;
 
-  if (!name || selling_price == null) {
-    return res.status(400).json({
+    // ✅ Validation
+    if (!name || selling_price === undefined || selling_price === null || cost_price === undefined || cost_price === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, selling price and cost price are required"
+      });
+    }
+
+    // ✅ Check duplicate SKU (skip if empty)
+    if (sku && sku.trim() !== '') {
+      const [existing] = await db.query(
+        "SELECT id FROM products WHERE sku = ?",
+        [sku.trim()]
+      );
+
+      if (existing.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "SKU already exists"
+        });
+      }
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO products
+      (name, category, sku, barcode, description, selling_price, cost_price, stock, threshold, unit_type, image, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        name,
+        category || null,
+        sku || null,
+        barcode || null,
+        description || null,
+        selling_price,
+        cost_price,
+        stock || 0,
+        threshold || 5,
+        unit_type || null,
+        image || null
+      ]
+    );
+
+    // ✅ Fetch created product and return full data
+    const [createdRows] = await db.query(
+      "SELECT * FROM products WHERE id = ?",
+      [result.insertId]
+    );
+
+    res.json({
+      success: true,
+      message: "Product created successfully",
+      id: result.insertId,
+      data: createdRows[0]
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
       success: false,
-      message: 'Product name and selling price are required'
+      message: "Error creating product"
     });
   }
-
-  const productIndex = store.products.findIndex(p => p.id === parseInt(req.params.id));
-
-  if (productIndex === -1) {
-    return res.status(404).json({ success: false, message: "Product not found" });
-  }
-
-  store.products[productIndex] = {
-    ...store.products[productIndex],
-    name,
-    category,
-    sku,
-    barcode,
-    description,
-    selling_price,
-    cost_price,
-    stock,
-    threshold,
-    unit_type
-  };
-
-  res.json({
-    success: true,
-    message: "Product updated",
-    data: store.products[productIndex]
-  });
 });
 
 // ===============================
-// DELETE PRODUCT
+// UPDATE PRODUCT (Admin ONLY)
 // ===============================
-router.delete('/:id', (req, res) => {
-  const productIndex = store.products.findIndex(p => p.id === parseInt(req.params.id));
+router.put('/:id', checkRole(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
 
-  if (productIndex === -1) {
-    return res.status(404).json({ success: false, message: "Product not found" });
+    // ✅ Check if product exists first
+    const [existing] = await db.query(
+      "SELECT * FROM products WHERE id = ?",
+      [id]
+    );
+
+    if (existing.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    // ✅ Build dynamic update query (only update provided fields)
+    const fields = [];
+    const values = [];
+    const allowedFields = ['name', 'category', 'sku', 'barcode', 'description', 'selling_price', 'cost_price', 'stock', 'threshold', 'unit_type', 'image'];
+
+    for (const field of allowedFields) {
+      if (field in updates) {
+        fields.push(`${field} = ?`);
+        values.push(updates[field] === '' ? null : updates[field]);
+      }
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No fields to update"
+      });
+    }
+
+    values.push(id);
+
+    const [result] = await db.query(
+      `UPDATE products SET ${fields.join(', ')} WHERE id=?`,
+      values
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    // ✅ Fetch and return updated product
+    const [updatedRows] = await db.query(
+      "SELECT * FROM products WHERE id = ?",
+      [id]
+    );
+
+    res.json({
+      success: true,
+      message: "Product updated successfully",
+      data: updatedRows[0]
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error updating product"
+    });
   }
+});
 
-  store.products.splice(productIndex, 1);
+// ===============================
+// DELETE PRODUCT (Admin ONLY)
+// ===============================
+router.delete('/:id', checkRole(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
 
-  res.json({
-    success: true,
-    message: "Product deleted"
-  });
+    const [result] = await db.query(
+      "DELETE FROM products WHERE id = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Product deleted successfully"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting product"
+    });
+  }
+});
+
+// ===============================
+// GET CATEGORIES
+// ===============================
+router.get('/categories/list', checkRole(['admin', 'cashier']), async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT DISTINCT category FROM products"
+    );
+
+    const categories = rows.map(r => r.category);
+
+    res.json({
+      success: true,
+      data: categories
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching categories"
+    });
+  }
 });
 
 module.exports = router;

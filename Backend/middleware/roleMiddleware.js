@@ -1,18 +1,32 @@
-const checkRole = (roles) => {
+const checkRole = (roles = []) => {
   return (req, res, next) => {
-    if (!req.user || !req.user.role) {
-      return res.status(401).json({
+    try {
+      // ❌ No user (token missing/invalid)
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized"
+        });
+      }
+
+      // ❌ Role not allowed
+      if (!roles.includes(req.user.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied"
+        });
+      }
+
+      next();
+
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
         success: false,
-        message: "Authentication required"
+        message: "Role check failed"
       });
     }
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied"
-      });
-    }
-    next();
   };
 };
 
