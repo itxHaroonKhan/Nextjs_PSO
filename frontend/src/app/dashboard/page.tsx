@@ -16,6 +16,8 @@ import {
   Loader2
 } from "lucide-react"
 import { AIInsights } from "@/components/dashboard/ai-insights"
+
+// In the return of DashboardPage component, make sure AIInsights is used.
 import { DonutChart } from "@/components/DonutChart"
 import { useLanguage } from "@/contexts/language-context"
 import ProtectedRoute from "@/components/protected-route"

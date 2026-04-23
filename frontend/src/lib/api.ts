@@ -27,13 +27,19 @@ api.interceptors.response.use(
 
     // Log detailed error info for debugging
     const errorMsg = responseData?.message || error.message || 'Unknown error'
-    console.error(`❌ API Error [${status || 'NETWORK'}]: ${errorMsg}`, {
-      url: error.config?.url,
-      method: error.config?.method,
-      requestData: error.config?.data,
-      serverResponse: responseData,
-      errorMessage: error.message
-    })
+    const isExpectedError = [400, 401, 403, 422].includes(status)
+    
+    if (isExpectedError) {
+      console.warn(`⚠️ API Warning [${status}]: ${errorMsg}`)
+    } else {
+      console.error(`❌ API Error [${status || 'NETWORK'}]: ${errorMsg}`, {
+        url: error.config?.url,
+        method: error.config?.method,
+        requestData: error.config?.data,
+        serverResponse: responseData,
+        errorMessage: error.message
+      })
+    }
 
     // Only redirect on 401 (unauthorized/token expired)
     if (status === 401) {

@@ -122,16 +122,29 @@ router.post('/login', async (req, res) => {
 
     if (!rows || rows.length === 0) {
       console.log('❌ User not found');
-      return res.status(400).json({ success: false, message: "Invalid email or password." });
+      return res.json({ success: false, message: "Invalid email or password." });
     }
 
     const user = rows[0];
     console.log('✅ User found, ID:', user.id);
 
     // 2. Check lock
-    if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
-      console.log('🔒 Account is locked');
-      return res.status(403).json({ success: false, message: "Account locked. Try again later." });
+    const now = new Date();
+    // Ensure it's a Date object regardless of driver behavior
+    let lockTime = null;
+    if (user.lockUntil) {
+      lockTime = (user.lockUntil instanceof Date) ? user.lockUntil : new Date(user.lockUntil);
+    }
+    
+    if (lockTime && (lockTime.getTime() > (now.getTime() - 2000))) { // 2s buffer
+      const remainingMs = lockTime.getTime() - now.getTime();
+      const remainingMins = Math.max(1, Math.ceil(remainingMs / (60 * 1000)));
+      console.log(`🔒 Account is locked for ${remainingMins} more mins`);
+      return res.json({ 
+        success: false, 
+        message: `Account locked. Please try again in ${remainingMins} minutes.`,
+        lockUntil: lockTime.getTime()
+      });
     }
 
     // 3. Compare password
@@ -139,16 +152,29 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      const attempts = (user.failedAttempts || 0) + 1;
-      console.log(`❌ Wrong password. Attempt: ${attempts}`);
+      // ✅ Ensure we have a number
+      const currentAttempts = parseInt(user.failedAttempts) || 0;
+      const newAttempts = currentAttempts + 1;
+      
+      console.log(`❌ Password mismatch for ${email}. New attempt count: ${newAttempts}`);
 
-      if (attempts >= 3) {
-        await db.query("UPDATE users SET failedAttempts = ?, lockUntil = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE id = ?", [attempts, user.id]);
-        return res.status(403).json({ success: false, message: "Account locked for 30 mins." });
+      if (newAttempts >= 3) {
+        const lockDuration = 30 * 60 * 1000;
+        const lockUntil = new Date(Date.now() + lockDuration);
+        await db.query("UPDATE users SET failedAttempts = ?, lockUntil = ? WHERE id = ?", [newAttempts, lockUntil, user.id]);
+        console.log(`🔒 Account ${email} is now LOCKED for 30 mins.`);
+        return res.json({ 
+          success: false, 
+          message: "Account locked for 30 mins due to 3 failed attempts.",
+          lockUntil: lockUntil.getTime()
+        });
       }
 
-      await db.query("UPDATE users SET failedAttempts = ? WHERE id = ?", [attempts, user.id]);
-      return res.status(401).json({ success: false, message: `Invalid password (${attempts}/3).` });
+      await db.query("UPDATE users SET failedAttempts = ? WHERE id = ?", [newAttempts, user.id]);
+      return res.json({ 
+        success: false, 
+        message: `Invalid password. Attempt ${newAttempts} of 3.` 
+      });
     }
 
     // 4. Success -> Reset failed attempts

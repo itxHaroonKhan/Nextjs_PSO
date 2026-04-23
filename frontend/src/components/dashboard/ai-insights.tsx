@@ -11,34 +11,58 @@ export function AIInsights() {
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
-    const fetchInsights = async () => {
+    const fetchAIInsights = async () => {
       try {
-        const result = await api.get('/dashboard/insights')
-        const data = result.data.data
-        if (data && data.length > 0) {
-          setInsight(data.map((d: any) => d.message).join(' '))
-        } else {
-          setInsight("System is running smoothly. No critical insights at this time.")
+        setLoading(true)
+        // Fetch real data from dashboard to feed into AI
+        const result = await api.get('/dashboard/all')
+        const { stats, recentSales, topCategories } = result.data.data
+
+        const prompt = `
+          As a POS System Business Analyst, provide a very concise (2-3 sentences) summary of the current business state based on this data:
+          - Today's Revenue: Rs. ${stats.todayRevenue}
+          - Today's Sales: ${stats.todaySales}
+          - Low Stock Items: ${stats.lowStock}
+          - Recent Sales: ${recentSales.map((s: any) => s.grand_total).join(', ')}
+          - Top Categories: ${topCategories.map((c: any) => c.category).join(', ')}
+          
+          Highlight one positive trend and one area that needs attention. Be professional and encouraging.
+        `
+
+        // Call the internal API route instead of importing genkit directly
+        const aiResponse = await fetch('/api/ai/insights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        })
+        
+        const aiData = await aiResponse.json()
+
+        if (!aiResponse.ok) {
+          throw new Error(aiData.details || aiData.error || 'AI request failed')
         }
-      } catch (error) {
-        setInsight("AI insights temporarily unavailable. Please try again later.")
+        
+        setInsight(aiData.text || "AI generated a response but no text was found.")
+      } catch (error: any) {
+        console.error("AI Insight Error:", error)
+        setInsight(`AI Error: ${error.message || "Connection failed"}`)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchInsights()
+    fetchAIInsights()
   }, [])
 
   const staticInsights = [
     {
       title: "Inventory Alert",
-      description: "3 products are running low on stock. Consider restocking Pasta with Roast Beef, Tofu Poke Bowl, and Apple Stuffed Pancake.",
+      description: "Check inventory for items running below threshold to avoid stockouts.",
       type: "warning",
     },
     {
       title: "Customer Growth",
-      description: "12 new customers joined this week. Customer retention rate is at 78%.",
+      description: "Monitor new signups to improve customer retention strategies.",
       type: "positive",
     },
   ]

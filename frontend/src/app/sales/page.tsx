@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Image from "next/image"
-import { Search, Minus, Plus, Trash2, ShoppingCart, Bell, Settings, LogOut, Edit2, Printer, ChevronDown, ChevronUp, Globe } from "lucide-react"
+import { Search, Minus, Plus, Trash2, ShoppingCart, Bell, Settings, LogOut, Printer, ChevronDown, ChevronUp, Globe } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -675,12 +675,6 @@ export default function POSPage() {
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm xs:text-base md:text-lg font-semibold text-foreground truncate">{t('cart.title')}</h3>
               <div className="flex gap-1.5 xs:gap-2 flex-shrink-0">
-                <button 
-                  className="hidden md:flex w-8 h-8 rounded-lg items-center justify-center hover:bg-muted transition-colors active:scale-95"
-                  onClick={() => toast({ title: "Edit Order", description: "Order editing feature coming soon." })}
-                >
-                  <Edit2 className="w-4 h-4 text-muted-foreground" />
-                </button>
                 <button
                   onClick={clearCart}
                   className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-destructive/20 transition-colors active:scale-90"

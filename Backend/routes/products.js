@@ -186,13 +186,18 @@ router.post('/', checkRole(['admin']), async (req, res) => {
       image
     } = req.body;
 
-    // ✅ Validation
-    if (!name || selling_price === undefined || selling_price === null || cost_price === undefined || cost_price === null) {
+    // ✅ Validation (Relaxed to allow 0)
+    if (!name) {
       return res.status(400).json({
         success: false,
-        message: "Name, selling price and cost price are required"
+        message: "Product name is required"
       });
     }
+
+    const sellingPrice = parseFloat(selling_price) || 0;
+    const costPrice = parseFloat(cost_price) || 0;
+    const stockQty = parseInt(stock) || 0;
+    const stockThreshold = parseInt(threshold) || 5;
 
     // ✅ Check duplicate SKU (skip if empty)
     if (sku && sku.trim() !== '') {
@@ -209,43 +214,53 @@ router.post('/', checkRole(['admin']), async (req, res) => {
       }
     }
 
-    const [result] = await db.query(
-      `INSERT INTO products
-      (name, category, sku, barcode, description, selling_price, cost_price, stock, threshold, unit_type, image, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        name,
-        category || null,
-        sku || null,
-        barcode || null,
-        description || null,
-        selling_price,
-        cost_price,
-        stock || 0,
-        threshold || 5,
-        unit_type || null,
-        image || null
-      ]
-    );
+    console.log('📦 Attempting to create product:', { name, sellingPrice, costPrice, stockQty });
 
-    // ✅ Fetch created product and return full data
-    const [createdRows] = await db.query(
-      "SELECT * FROM products WHERE id = ?",
-      [result.insertId]
-    );
+    try {
+      const [result] = await db.query(
+        `INSERT INTO products 
+        (name, category, sku, barcode, description, selling_price, cost_price, stock, threshold, unit_type, image, created_at) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          name,
+          category || null,
+          sku || null,
+          barcode || null,
+          description || null,
+          sellingPrice,
+          costPrice,
+          stockQty,
+          stockThreshold,
+          unit_type || 'pcs',
+          image || null
+        ]
+      );
 
-    res.json({
-      success: true,
-      message: "Product created successfully",
-      id: result.insertId,
-      data: createdRows[0]
-    });
+      // ✅ Fetch created product
+      const [createdRows] = await db.query("SELECT * FROM products WHERE id = ?", [result.insertId]);
+
+      res.json({
+        success: true,
+        message: "Product created successfully",
+        id: result.insertId,
+        data: createdRows[0]
+      });
+    } catch (dbErr) {
+      console.error('❌ Database Error during product creation:', dbErr);
+      
+      // Return specific error message for debugging
+      return res.status(500).json({
+        success: false,
+        message: "Database Error: " + dbErr.message,
+        error_code: dbErr.code
+      });
+    }
 
   } catch (err) {
-    console.error(err);
+    console.error('❌ Server Error:', err);
     res.status(500).json({
       success: false,
-      message: "Error creating product"
+      message: "Internal Server Error: " + err.message
     });
   }
 });

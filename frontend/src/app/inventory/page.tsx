@@ -192,16 +192,21 @@ export default function InventoryPage() {
 
     setSaving(true)
     try {
+      const sellingPrice = parseFloat(numInputs.price);
+      const costPrice = parseFloat(numInputs.costPrice);
+      const stockValue = parseInt(numInputs.stock);
+      const thresholdValue = parseInt(numInputs.minStock);
+
       const res = await api.post("/products", {
         name: newProduct.name,
         category: newProduct.category || "",
         sku: newProduct.sku || "",
         barcode: newProduct.barcode || "",
         description: newProduct.description || "",
-        selling_price: newProduct.price || 0,
-        cost_price: newProduct.costPrice || 0,
-        stock: newProduct.stock ?? 0,
-        threshold: newProduct.minStock ?? 10,
+        selling_price: isNaN(sellingPrice) ? 0 : sellingPrice,
+        cost_price: isNaN(costPrice) ? 0 : costPrice,
+        stock: isNaN(stockValue) ? 0 : stockValue,
+        threshold: isNaN(thresholdValue) ? 10 : thresholdValue,
         unit_type: newProduct.unitType || "pcs",
         image: newProduct.image || "",
       })
@@ -228,6 +233,12 @@ export default function InventoryPage() {
       }
       setIsAddOpen(false)
       setNewProduct({ name: "", category: "", price: 0, costPrice: 0, stock: 0, minStock: 10, sku: "", barcode: "", description: "", unitType: "pcs", image: "" })
+      setNumInputs({
+        price: "0",
+        costPrice: "0",
+        stock: "0",
+        minStock: "10"
+      })
       setProductImage("")
       toast({ title: "Product added", description: `${product.name} has been added to inventory.` })
     } catch (err) {
@@ -702,11 +713,12 @@ export default function InventoryPage() {
                   <Label>Stock</Label>
                   <Input type="number" value={editingProduct.stock ?? 0} onChange={(e) => setEditingProduct({ ...editingProduct, stock: parseInt(e.target.value) || 0 })} />
                 </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Min Stock</Label>
                   <Input type="number" value={editingProduct.minStock ?? 10} onChange={(e) => setEditingProduct({ ...editingProduct, minStock: parseInt(e.target.value) || 10 })} />
                 </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Unit Type</Label>
                   <Select 
@@ -727,7 +739,6 @@ export default function InventoryPage() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
               </div>
             </div>
           )}
