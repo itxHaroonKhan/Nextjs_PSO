@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search, Plus, Edit, Trash2, AlertTriangle, Package, TrendingUp, TrendingDown, PackagePlus, Upload, X, Loader2 } from "lucide-react"
+import { Search, Plus, Edit, Trash2, AlertTriangle, Package, TrendingUp, TrendingDown, PackagePlus, Upload, Download, X, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +27,8 @@ import { useLanguage } from "@/contexts/language-context"
 import ProtectedRoute from "@/components/protected-route"
 import api from "@/lib/api"
 import { AxiosError } from "axios"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface Product {
   id: string
@@ -52,6 +54,14 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [selectedCategory, setSelectedCategory] = React.useState("All")
   const [isAddOpen, setIsAddOpen] = React.useState(false)
+
+  // Generate random SKU when dialog opens
+  React.useEffect(() => {
+    if (isAddOpen) {
+      const randomSku = "SKU-" + Math.random().toString(36).substring(2, 9).toUpperCase();
+      setNewProduct(prev => ({ ...prev, sku: randomSku }));
+    }
+  }, [isAddOpen]);
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null)
   const [restockingProduct, setRestockingProduct] = React.useState<Product | null>(null)
   const [restockQuantity, setRestockQuantity] = React.useState(0)
@@ -118,6 +128,34 @@ export default function InventoryPage() {
     }
   }
 
+  const [isImportOpen, setIsImportOpen] = React.useState(false)
+  const [importResult, setImportResult] = React.useState<{
+    success: boolean;
+    message: string;
+    totalRows: number;
+    errors: string[] | null;
+  } | null>(null);
+
+  const downloadExampleCSV = () => {
+    const csvHeader = "id,name,category,sku,barcode,description,selling_price,cost_price,stock,threshold,unit_type,created_at,image\n";
+    const csvRows = [
+      "1,Sample Product A,Electronics,SKU001,1234567890123,Basic electronic item,1500,1200,50,10,pcs,2026-01-01,https://example.com/image1.jpg",
+      "2,Sample Product B,Groceries,SKU002,1234567890124,Daily grocery item,200,150,100,20,pcs,2026-01-02,https://example.com/image2.jpg",
+      "3,Sample Product C,Clothing,SKU003,1234567890125,Casual wear item,2500,1800,30,5,pcs,2026-01-03,https://example.com/image3.jpg",
+      "4,Sample Product D,Stationery,SKU004,1234567890126,Office stationery item,300,200,200,50,pcs,2026-01-04,https://example.com/image4.jpg",
+      "5,Sample Product E,Home Decor,SKU005,1234567890127,Decorative item,1200,900,20,5,pcs,2026-01-05,https://example.com/image5.jpg"
+    ].join("\n");
+    
+    const csvContent = "data:text/csv;charset=utf-8," + csvHeader + csvRows;
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "bulk_import_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -132,26 +170,28 @@ export default function InventoryPage() {
       })
 
       if (res.data.success) {
-        toast({
-          title: "Import Successful",
-          description: res.data.message
+        setImportResult({
+          success: true,
+          message: res.data.message,
+          totalRows: res.data.totalRows,
+          errors: res.data.errors
         })
+        setIsImportOpen(false)
         fetchProducts()
-      }
-
-      if (res.data.errors && res.data.errors.length > 0) {
-        console.error('Import errors:', res.data.errors)
-        toast({
-          title: "Import completed with some errors",
-          description: `Failed to import ${res.data.errors.length} rows. Check console for details.`,
-          variant: "destructive"
+      } else {
+        setImportResult({
+          success: false,
+          message: res.data.message || "Import failed",
+          totalRows: 0,
+          errors: res.data.errors || ["Unknown error occurred"]
         })
       }
     } catch (err: any) {
-      toast({
-        title: "Import Failed",
-        description: err.response?.data?.message || "An error occurred during import",
-        variant: "destructive"
+      setImportResult({
+        success: false,
+        message: "Import failed due to a server error",
+        totalRows: 0,
+        errors: [err.response?.data?.message || err.message || "An error occurred during import"]
       })
     } finally {
       setIsImporting(false)
@@ -399,6 +439,7 @@ export default function InventoryPage() {
 
   return (
     <ProtectedRoute>
+      <>
       <div className="space-y-6" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -416,7 +457,7 @@ export default function InventoryPage() {
           />
           <Button 
             variant="outline" 
-            onClick={() => fileInputRef.current?.click()} 
+            onClick={() => setIsImportOpen(true)} 
             disabled={isImporting}
             className="gap-2 flex-1 sm:flex-none"
           >
@@ -794,7 +835,110 @@ export default function InventoryPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Bulk Import Dialog */}
+      <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Upload className="w-5 h-5 text-primary" />{t('inventory.bulkImport')}</DialogTitle>
+            <DialogDescription>{t('inventory.importSuccessMsg')}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-muted rounded-xl bg-muted/10">
+              <Package className="w-10 h-10 text-muted-foreground mb-4 opacity-50" />
+              <p className="text-sm text-center text-muted-foreground mb-6">
+                Please use our CSV template to ensure your product data is formatted correctly.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                <Button variant="outline" onClick={downloadExampleCSV} className="gap-2">
+                  <Download className="w-4 h-4" />
+                  {t('inventory.exampleFile')}
+                </Button>
+                <div className="relative">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleBulkImport}
+                    accept=".csv"
+                    className="hidden"
+                  />
+                  <Button 
+                    onClick={() => fileInputRef.current?.click()} 
+                    disabled={isImporting}
+                    className="gap-2 w-full bg-primary hover:bg-primary/90"
+                  >
+                    {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {t('inventory.uploadFile')}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Required Columns:</p>
+              <div className="flex flex-wrap gap-1">
+                {['name', 'category', 'sku', 'selling_price', 'cost_price', 'stock'].map(col => (
+                  <Badge key={col} variant="secondary" className="text-[10px] py-0">{col}</Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsImportOpen(false)} className="w-full sm:w-auto">{t('inventory.cancel')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Result Summary Dialog */}
+      <Dialog open={!!importResult} onOpenChange={(open) => !open && setImportResult(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {!importResult?.success ? (
+                <X className="w-5 h-5 text-destructive" />
+              ) : importResult?.errors && importResult.errors.length > 0 ? (
+                <AlertTriangle className="w-5 h-5 text-orange-500" />
+              ) : (
+                <Package className="w-5 h-5 text-green-500" />
+              )}
+              {importResult?.success ? t('inventory.importResult') : t('inventory.importFailed')}
+            </DialogTitle>
+            <DialogDescription>
+              {importResult?.message}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {importResult?.errors && importResult.errors.length > 0 && (
+            <div className="space-y-4">
+              <Alert variant={importResult.success ? "default" : "destructive"} className={importResult.success ? "bg-orange-500/10 text-orange-600 border-orange-200" : "bg-destructive/10 text-destructive border-destructive/20"}>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>{importResult.success ? t('inventory.someRowsFailed') : t('inventory.errorsOccurred')}</AlertTitle>
+                <AlertDescription>
+                  {importResult.success ? `${importResult.errors.length} rows could not be imported due to errors (e.g., duplicate SKUs).` : t('inventory.importErrorMsg')}
+                </AlertDescription>
+              </Alert>
+              
+              <div className="text-sm font-medium">{t('inventory.errorDetails')}:</div>
+              <ScrollArea className="h-[200px] w-full rounded-md border p-4">
+                <ul className="space-y-2">
+                  {importResult.errors.map((err, i) => (
+                    <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                      <span className="text-destructive mt-1">•</span>
+                      {err}
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button onClick={() => setImportResult(null)} className="w-full" variant={importResult?.success ? "default" : "destructive"}>
+              {t('inventory.cancel')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+    </>
     </ProtectedRoute>
   )
 }

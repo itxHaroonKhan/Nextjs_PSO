@@ -7,9 +7,9 @@ const verifyToken = require('../middleware/authMiddleware');
 const checkRole = require('../middleware/roleMiddleware');
 
 // ===============================
-// GET FULL SETTINGS (Admin ONLY)
+// GET FULL SETTINGS (Admin + Cashier)
 // ===============================
-router.get('/', verifyToken, checkRole(['admin']), async (req, res) => {
+router.get('/', verifyToken, checkRole(['admin', 'cashier']), async (req, res) => {
   try {
     const [rows] = await db.query("SELECT * FROM settings WHERE id = 1");
 

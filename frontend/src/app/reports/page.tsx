@@ -99,20 +99,61 @@ export default function ReportsPage() {
           </Select>
           <Button variant="outline" className="gap-2 flex-shrink-0" onClick={() => {
             if (!salesData || salesData.length === 0) return;
-            let csvContent = "data:text/csv;charset=utf-8,";
-            csvContent += "Date,Revenue,Total Orders\n";
-            salesData.forEach((row: any) => {
-              const dateObj = new Date(row.date);
-              const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString() : '';
-              csvContent += `${dateStr},${row.revenue},${row.total_sales}\n`;
-            });
-            const encodedUri = encodeURI(csvContent);
+            
+            // Generate Excel-compatible HTML Table
+            let html = `
+              <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+              <head>
+                <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+                <style>
+                  table { border-collapse: collapse; width: 100%; }
+                  th { background-color: #4CAF50; color: white; font-weight: bold; border: 1px solid #ddd; padding: 8px; }
+                  td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                  .header { font-size: 18px; font-weight: bold; margin-bottom: 20px; }
+                  .summary { margin-top: 20px; font-weight: bold; }
+                </style>
+              </head>
+              <body>
+                <div class="header">Sales Report - ${period.toUpperCase()}</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Revenue (PKR)</th>
+                      <th>Total Orders</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${salesData.map(row => {
+                      const dateObj = new Date(row.date);
+                      const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString() : '';
+                      return `
+                        <tr>
+                          <td>${dateStr}</td>
+                          <td>${parseFloat(row.revenue).toFixed(2)}</td>
+                          <td>${row.total_sales}</td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+                <div class="summary">
+                  <p>Total Revenue: Rs. ${totalSales.toLocaleString()}</p>
+                  <p>Total Orders: ${totalOrders}</p>
+                </div>
+              </body>
+              </html>
+            `;
+
+            const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+            const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `sales_report_${period}.csv`);
+            link.href = url;
+            link.download = `sales_report_${period}_${new Date().toISOString().split('T')[0]}.xls`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(url);
           }}>
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">{t('reports.export')}</span>

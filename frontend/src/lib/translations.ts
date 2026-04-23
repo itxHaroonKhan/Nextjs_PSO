@@ -119,6 +119,16 @@ export type TranslationKeys = {
   'inventory.missingFields': string
   'inventory.fillRequired': string
   'inventory.productImage': string
+  'inventory.bulkImport': string
+  'inventory.importResult': string
+  'inventory.importFailed': string
+  'inventory.someRowsFailed': string
+  'inventory.errorsOccurred': string
+  'inventory.importSuccessMsg': string
+  'inventory.importErrorMsg': string
+  'inventory.errorDetails': string
+  'inventory.uploadFile': string
+  'inventory.exampleFile': string
 
   // Customers
   'customers.title': string
@@ -341,6 +351,16 @@ export const translations: Record<'en' | 'ur', TranslationKeys> = {
     'inventory.missingFields': 'Missing fields',
     'inventory.fillRequired': 'Please fill in all required fields.',
     'inventory.productImage': 'Product Image',
+    'inventory.bulkImport': 'Bulk Import',
+    'inventory.importResult': 'Import Result',
+    'inventory.importFailed': 'Import Failed',
+    'inventory.someRowsFailed': 'Some rows failed',
+    'inventory.errorsOccurred': 'Errors occurred',
+    'inventory.importSuccessMsg': 'Download the template or upload your product CSV file.',
+    'inventory.importErrorMsg': 'Failed to import some rows. See details below.',
+    'inventory.errorDetails': 'Error Details',
+    'inventory.uploadFile': 'Upload File',
+    'inventory.exampleFile': 'Example File',
 
     // Customers
     'customers.title': 'Customers',
@@ -562,6 +582,16 @@ export const translations: Record<'en' | 'ur', TranslationKeys> = {
     'inventory.missingFields': 'خانہ خالی ہے',
     'inventory.fillRequired': 'براہ کرم تمام ضروری خانے پُر کریں۔',
     'inventory.productImage': 'پروڈکٹ کی تصویر',
+    'inventory.bulkImport': 'بلک امپورٹ',
+    'inventory.importResult': 'امپورٹ کا نتیجہ',
+    'inventory.importFailed': 'امپورٹ ناکام',
+    'inventory.someRowsFailed': 'کچھ لائنیں ناکام ہوئیں',
+    'inventory.errorsOccurred': 'غلطیاں پیش آئیں',
+    'inventory.importSuccessMsg': 'ٹیمپلیٹ ڈاؤن لوڈ کریں یا اپنی پروڈکٹ CSV فائل اپ لوڈ کریں۔',
+    'inventory.importErrorMsg': 'کچھ لائنیں امپورٹ نہیں ہو سکیں۔ تفصیلات نیچے دیکھیں۔',
+    'inventory.errorDetails': 'غلطی کی تفصیلات',
+    'inventory.uploadFile': 'فائل اپ لوڈ کریں',
+    'inventory.exampleFile': 'نمونہ فائل',
 
     // Customers
     'customers.title': 'کسٹمرز',
