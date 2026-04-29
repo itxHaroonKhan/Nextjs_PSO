@@ -23,6 +23,7 @@ router.get('/', checkRole(['admin', 'cashier']), async (req, res) => {
         IFNULL(SUM(s.final_total), 0) AS totalSpent
       FROM customers c
       LEFT JOIN sales s ON c.id = s.customer_id
+      WHERE c.phone IS NOT NULL AND c.phone != ''
       GROUP BY c.id
       ORDER BY c.id DESC
     `;

@@ -144,7 +144,7 @@ export function PaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md z-[10000] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md z-[10000]">
         <DialogHeader>
           <DialogTitle>Complete Payment</DialogTitle>
           <DialogDescription>
@@ -165,6 +165,16 @@ export function PaymentDialog({
             {/* Customer Info */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label htmlFor="customerPhone">Phone (Optional)</Label>
+                <Input
+                  id="customerPhone"
+                  placeholder="92-XXXXXXXXXX"
+                  value={customerPhone}
+                  onChange={handlePhoneChange}
+                  type="tel"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="customerName" className="flex items-center gap-1">
                   Customer Name <span className="text-red-500">*</span>
                 </Label>
@@ -173,17 +183,7 @@ export function PaymentDialog({
                   placeholder="Required"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className={!customerName.trim() ? "border-red-500/50" : ""}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="customerPhone">Phone (Optional)</Label>
-                <Input
-                  id="customerPhone"
-                  placeholder="92-XXXXXXXXXX"
-                  value={customerPhone}
-                  onChange={handlePhoneChange}
-                  type="tel"
+                  className={!customerName.trim() ? "border-white/50" : ""}
                 />
               </div>
             </div>

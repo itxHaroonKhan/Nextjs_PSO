@@ -33,7 +33,8 @@ router.get('/all', checkRole(['admin', 'cashier']), async (req, res) => {
           (SELECT IFNULL(SUM(final_total),0) FROM sales WHERE YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())) AS monthRevenue
       `),
       db.query(`
-        SELECT s.id, s.final_total AS grand_total, s.payment_method, s.created_at AS sale_date, c.name AS customer_name
+        SELECT s.id, s.final_total AS grand_total, s.payment_method, s.created_at AS sale_date,
+               c.name AS customer_name
         FROM sales s LEFT JOIN customers c ON s.customer_id = c.id
         ORDER BY s.id DESC LIMIT 5
       `),
@@ -103,7 +104,7 @@ router.get('/stats', checkRole(['admin', 'cashier']), async (req, res) => {
 router.get('/recent-sales', checkRole(['admin', 'cashier']), async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT 
+      SELECT
         s.id,
         s.final_total AS grand_total,
         s.payment_method,

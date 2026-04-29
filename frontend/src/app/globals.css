@@ -29,8 +29,8 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
     --ring: 183 100% 50%;
 
     --radius: 1rem;
@@ -47,7 +47,7 @@
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 262 80% 65%;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 240 5% 90%;
+    --sidebar-border: 0 0% 100%;
     --sidebar-ring: 183 100% 50%;
   }
 
@@ -77,8 +77,8 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 20% 25%;
-    --input: 240 20% 25%;
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
     --ring: 183 100% 65%;
 
     --radius: 1.25rem;
@@ -95,7 +95,7 @@
     --sidebar-primary-foreground: 240 20% 8%;
     --sidebar-accent: 262 80% 65%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 240 20% 20%;
+    --sidebar-border: 0 0% 100%;
     --sidebar-ring: 183 100% 65%;
   }
 }
@@ -146,6 +146,47 @@
     box-shadow: 0 10px 30px -15px rgb(0 0 0 / 0.5),
                 inset 0 1px 0 0 rgba(255,255,255,0.05);
   }
+}
+
+/* ===== Input Hover Text Grow Effect ===== */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+textarea,
+select {
+  transition: font-size 0.15s ease, border-color 0.15s ease !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):hover,
+textarea:hover {
+  font-size: 0.95rem !important;
+}
+
+/* ===== ComboInput Dropdown Option Hover ===== */
+.combo-option:hover {
+  background: hsl(var(--accent) / 0.15);
+  color: hsl(var(--accent));
+  padding-left: 1.25rem;
+  border-left: 3px solid hsl(var(--accent));
+  font-weight: 500;
+}
+
+/* ===== Select Dropdown Item Animations ===== */
+[role="option"] {
+  transition: background 150ms ease, color 150ms ease, padding-left 150ms ease, border-left 150ms ease !important;
+  border-left: 3px solid transparent;
+  cursor: pointer !important;
+}
+
+[role="option"][data-highlighted] {
+  background: hsl(var(--accent) / 0.15) !important;
+  color: hsl(var(--accent)) !important;
+  border-left: 3px solid hsl(var(--accent)) !important;
+  padding-left: 2.5rem !important;
+  font-weight: 500;
+}
+
+[role="option"][data-state="checked"] {
+  color: hsl(var(--accent)) !important;
+  font-weight: 600;
 }
 
 /* Responsive Utilities */

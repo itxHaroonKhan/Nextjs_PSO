@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Store, Bell, CreditCard, Palette, Save, Loader2, Trash2, AlertTriangle } from "lucide-react"
+import { Store, Bell, CreditCard, Palette, Save, Loader2 } from "lucide-react"
 import { useTheme } from "@/contexts/theme-context"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/contexts/language-context"
@@ -56,8 +56,6 @@ export default function SettingsPage() {
   })
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
-  const [resetting, setResetting] = React.useState(false)
-
   // Check if user is admin
   React.useEffect(() => {
     const role = localStorage.getItem('userRole')
@@ -120,42 +118,6 @@ export default function SettingsPage() {
       })
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleResetData = async () => {
-    // Check role again
-    if (localStorage.getItem('userRole') !== 'admin') {
-      toast({
-        title: "Permission Denied",
-        description: "Only admins can reset system data.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const confirmed = window.confirm("⚠️ Are you sure you want to reset all dashboard data? This will PERMANENTLY delete all sales records and cannot be undone.")
-    
-    if (!confirmed) return
-
-    setResetting(true)
-    try {
-      const res = await api.post("/settings/reset-data")
-      if (res.data.success) {
-        toast({
-          title: "Success",
-          description: "All sales data has been reset. Dashboard will now show 0.",
-        })
-      }
-    } catch (err) {
-      const error = err as AxiosError<{ message?: string }>
-      toast({
-        title: "Reset Failed",
-        description: error.response?.data?.message || "Failed to reset data",
-        variant: "destructive",
-      })
-    } finally {
-      setResetting(false)
     }
   }
 
@@ -352,31 +314,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-red-500/20 bg-red-500/5">
-          <CardHeader>
-            <AlertTriangle className="w-5 h-5 text-red-500 mb-2" />
-            <CardTitle className="text-red-500">Data Management</CardTitle>
-            <CardDescription>Reset system data and clear logs</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <label className="text-sm font-medium text-red-600">Reset Dashboard Data</label>
-                <p className="text-xs text-muted-foreground">Delete all sales records and reset revenue to zero.</p>
-              </div>
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                className="gap-2" 
-                onClick={handleResetData}
-                disabled={resetting}
-              >
-                {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                Reset Data
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="flex flex-col sm:flex-row justify-end gap-2">

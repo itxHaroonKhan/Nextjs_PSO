@@ -171,14 +171,42 @@ export function AppSidebar() {
     return roleAllowed && hasPermission;
   })
 
+  const passwordRules = [
+    { label: "At least 8 characters",    test: (p: string) => p.length >= 8 },
+    { label: "One uppercase letter (A-Z)", test: (p: string) => /[A-Z]/.test(p) },
+    { label: "One lowercase letter (a-z)", test: (p: string) => /[a-z]/.test(p) },
+    { label: "One number (0-9)",           test: (p: string) => /[0-9]/.test(p) },
+    { label: "One symbol (!@#$%^&*)",      test: (p: string) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(p) },
+  ]
+
+  const isEmailValid = (email: string) => /^[^\s@]+@[^\s@]+\.(com|org)$/i.test(email)
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Basic validation before sending
+
     if (!cashierData.name || !cashierData.email || !cashierData.password) {
       toast({
         title: "Missing Fields",
         description: "Please fill in name, email and password.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!isEmailValid(cashierData.email)) {
+      toast({
+        title: "Invalid Email",
+        description: "Email must end with .com or .org (e.g. user@example.com)",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const failedRule = passwordRules.find(r => !r.test(cashierData.password))
+    if (failedRule) {
+      toast({
+        title: "Weak Password",
+        description: `Password requirement not met: ${failedRule.label}`,
         variant: "destructive"
       })
       return
@@ -238,9 +266,6 @@ export function AppSidebar() {
           <div className="w-auto h-8 rounded flex items-center justify-center overflow-hidden">
             <img src="/Logoo.png" alt="Software Elites" className="w-full h-full object-cover" />
           </div>
-          {/* <span className="font-headline font-bold text-xl group-data-[collapsible=icon]:hidden">
-            Software Elites
-          </span> */}
         </div>
       </SidebarHeader>
       <SidebarContent className="pt-4">
@@ -303,9 +328,8 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarFooter>
 
-      {/* Create User Dialog */}
       <Dialog open={isCashierOpen} onOpenChange={setIsCashierOpen}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-primary" />
@@ -317,105 +341,124 @@ export function AppSidebar() {
           </DialogHeader>
 
           <form onSubmit={handleCreateUser} autoComplete="off">
-            <div className="space-y-4 py-4">
-              {/* Full Name */}
-              <div className="space-y-2">
-                <Label htmlFor="create-user-name">Full Name</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="create-user-name"
-                    name="new-user-name"
-                    type="text"
-                    placeholder="Enter full name"
-                    className="pl-10"
-                    value={cashierData.name}
-                    onChange={(e) => setCashierData({ ...cashierData, name: e.target.value })}
-                    required
-                    autoComplete="new-password"
-                  />
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                {/* Full Name */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="create-user-name">Full Name</Label>
+                  <div className="relative">
+                    <User className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      id="create-user-name"
+                      name="new-user-name"
+                      type="text"
+                      placeholder="Full name"
+                      className="pl-9 h-9 text-sm"
+                      value={cashierData.name}
+                      onChange={(e) => setCashierData({ ...cashierData, name: e.target.value })}
+                      required
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+
+                {/* Email */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="create-user-email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      id="create-user-email"
+                      name="new-user-email"
+                      type="email"
+                      placeholder="user@example.com"
+                      className="pl-9 h-9 text-sm"
+                      value={cashierData.email}
+                      onChange={(e) => setCashierData({ ...cashierData, email: e.target.value })}
+                      required
+                      autoComplete="new-password"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Role Selection */}
-              <div className="space-y-2">
-                <Label>Assign Role</Label>
-                <Select 
-                  value={cashierData.role} 
-                  onValueChange={(v) => setCashierData({ ...cashierData, role: v })}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="cashier">Cashier</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="create-user-email">Email Address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="create-user-email"
-                    name="new-user-email"
-                    type="email"
-                    placeholder="user@example.com"
-                    className="pl-10"
-                    value={cashierData.email}
-                    onChange={(e) => setCashierData({ ...cashierData, email: e.target.value })}
-                    required
-                    autoComplete="new-password"
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div className="space-y-2">
-                <Label htmlFor="create-user-password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="create-user-password"
-                    name="new-user-password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter password"
-                    className="pl-10 pr-10"
-                    value={cashierData.password}
-                    onChange={(e) => setCashierData({ ...cashierData, password: e.target.value })}
-                    required
-                    minLength={6}
-                    autoComplete="new-password"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1 h-8 w-8"
-                    onClick={() => setShowPassword(!showPassword)}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Role Selection */}
+                <div className="space-y-1.5">
+                  <Label>Assign Role</Label>
+                  <Select 
+                    value={cashierData.role} 
+                    onValueChange={(v) => setCashierData({ ...cashierData, role: v })}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
+                    <SelectTrigger className="w-full h-9 text-sm">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="cashier">Cashier</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Password */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="create-user-password">Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      id="create-user-password"
+                      name="new-user-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Password"
+                      className="pl-9 pr-9 h-9 text-sm"
+                      value={cashierData.password}
+                      onChange={(e) => setCashierData({ ...cashierData, password: e.target.value })}
+                      required
+                      autoComplete="new-password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0.5 top-0.5 h-8 w-8"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
                 </div>
               </div>
+
+              {/* Live Password Requirements */}
+              {cashierData.password.length > 0 && (
+                <div className="bg-muted/30 border border-border rounded-lg p-2.5 space-y-1">
+                  {passwordRules.map((rule) => {
+                    const passed = rule.test(cashierData.password)
+                    return (
+                      <div key={rule.label} className="flex items-center gap-2 text-[11px]">
+                        <span className={passed ? "text-green-500" : "text-destructive"}>{passed ? "✓" : "✗"}</span>
+                        <span className={passed ? "text-green-500" : "text-muted-foreground"}>{rule.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
               {/* Permissions */}
-              <div className="space-y-3">
-                <Label className="text-sm font-semibold">Allow Access To Pages:</Label>
-                <div className="grid grid-cols-2 gap-3 bg-muted/30 p-3 rounded-lg border">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Page Access:</Label>
+                <div className="grid grid-cols-3 gap-2 bg-muted/30 p-2.5 rounded-lg border border-white">
                   {availablePages.map((page) => (
-                    <div key={page.id} className="flex items-center space-x-2">
+                    <div key={page.id} className="flex items-center space-x-1.5">
                       <Checkbox 
                         id={`page-${page.id}`} 
                         checked={cashierData.permissions.includes(page.id)}
                         onCheckedChange={() => togglePermission(page.id)}
+                        className="h-3.5 w-3.5"
                       />
                       <Label 
                         htmlFor={`page-${page.id}`}
-                        className="text-xs font-medium cursor-pointer"
+                        className="text-[10px] font-medium cursor-pointer leading-none"
                       >
                         {page.label}
                       </Label>
@@ -425,14 +468,14 @@ export function AppSidebar() {
               </div>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" type="button" onClick={() => setIsCashierOpen(false)} className="w-full sm:w-auto">
+            <DialogFooter className="mt-4 gap-2 sm:gap-0">
+              <Button variant="outline" type="button" onClick={() => setIsCashierOpen(false)} className="h-9 text-sm">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
+              <Button type="submit" disabled={isLoading} className="h-9 text-sm">
                 {isLoading ? (
                   <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     Creating...
                   </span>
                 ) : (

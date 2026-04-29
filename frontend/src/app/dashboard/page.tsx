@@ -4,6 +4,14 @@ import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import {
   ArrowUpRight,
   ArrowDownRight,
   DollarSign,
@@ -13,11 +21,15 @@ import {
   TrendingUp,
   Activity,
   Calendar,
-  Loader2
+  Loader2,
+  CreditCard,
+  User,
+  Clock,
+  Receipt,
+  Printer,
 } from "lucide-react"
 import { AIInsights } from "@/components/dashboard/ai-insights"
 
-// In the return of DashboardPage component, make sure AIInsights is used.
 import { DonutChart } from "@/components/DonutChart"
 import { useLanguage } from "@/contexts/language-context"
 import ProtectedRoute from "@/components/protected-route"
@@ -40,6 +52,74 @@ export default function DashboardPage() {
   const [topCategories, setTopCategories] = React.useState<any[]>([])
   const [dailySales, setDailySales] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [selectedSale, setSelectedSale] = React.useState<any>(null)
+  const [saleDetail, setSaleDetail] = React.useState<any>(null)
+  const [detailLoading, setDetailLoading] = React.useState(false)
+
+  const openSaleDetail = async (sale: any) => {
+    setSelectedSale(sale)
+    setSaleDetail(null)
+    setDetailLoading(true)
+    try {
+      const res = await api.get(`/sales/${sale.id}`)
+      if (res.data.success) setSaleDetail(res.data.data)
+    } catch {
+      setSaleDetail({ sale, items: [] })
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const printReceipt = () => {
+    const sale = selectedSale
+    const items = saleDetail?.items || []
+    const win = window.open('', '_blank', 'width=400,height=600')
+    if (!win) return
+    win.document.write(`
+      <html><head><title>Receipt - Sale #${sale?.id}</title>
+      <style>
+        body { font-family: monospace; font-size: 13px; padding: 20px; max-width: 320px; margin: auto; }
+        h2 { text-align: center; margin-bottom: 4px; font-size: 18px; }
+        .center { text-align: center; }
+        .divider { border-top: 1px dashed #000; margin: 8px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 12px; padding: 4px 2px; }
+        td { padding: 4px 2px; font-size: 12px; }
+        .right { text-align: right; }
+        .total { font-weight: bold; font-size: 14px; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+      <h2>Elites POS</h2>
+      <p class="center">Sale Receipt</p>
+      <div class="divider"></div>
+      <p><b>Sale #:</b> ${sale?.id}</p>
+      <p><b>Customer:</b> ${sale?.customer_name || 'Walk-in'}</p>
+      <p><b>Payment:</b> ${saleDetail?.sale?.payment_method || sale?.payment_method || '—'}</p>
+      <p><b>Date:</b> ${sale?.sale_date ? new Date(sale.sale_date).toLocaleString() : '—'}</p>
+      <div class="divider"></div>
+      <table>
+        <thead><tr><th>Item</th><th>Qty</th><th class="right">Price</th></tr></thead>
+        <tbody>
+          ${items.length > 0
+            ? items.map((item: any) => `
+              <tr>
+                <td>${item.product_name}</td>
+                <td>${item.quantity}</td>
+                <td class="right">Rs. ${parseFloat(item.price).toFixed(2)}</td>
+              </tr>`).join('')
+            : '<tr><td colspan="3" style="text-align:center">No items</td></tr>'
+          }
+        </tbody>
+      </table>
+      <div class="divider"></div>
+      <p class="total right">Total: Rs. ${parseFloat(sale?.grand_total || 0).toFixed(2)}</p>
+      <div class="divider"></div>
+      <p class="center">Thank you for your purchase!</p>
+      <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }<\/script>
+      </body></html>
+    `)
+    win.document.close()
+  }
 
   React.useEffect(() => {
     setUserRole(localStorage.getItem('userRole') || 'cashier')
@@ -49,15 +129,8 @@ export default function DashboardPage() {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const token = localStorage.getItem('authToken')
-        console.log('Auth Token:', token ? 'Exists' : 'Missing')
-        console.log('User Role:', localStorage.getItem('userRole'))
-        
-        // Use the consolidated endpoint to avoid 429 errors
         const res = await api.get('/dashboard/all')
         const { stats: statsData, recentSales: recentData, topCategories: categoriesData, dailySales: dailyData } = res.data.data
-
-        console.log('Dashboard Data:', res.data.data)
 
         setStats(statsData)
         setRecentSales(recentData || [])
@@ -183,7 +256,7 @@ export default function DashboardPage() {
       {/* Quick Insights & Real-time Sales */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
         <div className="min-w-0">
-          <AIInsights />
+          <AIInsights data={{ stats: statsData, recentSales, topCategories }} />
         </div>
         <Card className="overflow-visible min-w-0">
           <CardHeader className="pb-3">
@@ -199,9 +272,13 @@ export default function DashboardPage() {
               ) : (
                 recentSales.map((sale: any, i: number) => (
                   <div key={i} className="flex items-center gap-3">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                    <button
+                      onClick={() => openSaleDetail(sale)}
+                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0 hover:bg-primary/20 hover:scale-110 transition-all duration-200 cursor-pointer"
+                      title="View sale details"
+                    >
                       <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-                    </div>
+                    </button>
                     <div className="flex-1 min-w-0 space-y-1">
                       <p className="text-xs sm:text-sm font-medium leading-none truncate">Sale #{sale.id}</p>
                       <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{sale.customer_name || 'Walk-in'} • {new Date(sale.sale_date).toLocaleTimeString()}</p>
@@ -265,7 +342,6 @@ export default function DashboardPage() {
                             <div className="absolute left-1/2 -translate-x-1/2 -top-12 sm:-top-16 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
                               <div className="bg-card border border-border rounded-lg px-1.5 sm:px-2 py-1 sm:py-1.5 shadow-xl min-w-[60px] sm:min-w-[80px]">
                                 <p className="text-[8px] sm:text-[10px] font-bold text-white">Rs. {day.revenue.toLocaleString()}</p>
-                                <p className="text-[7px] sm:text-[8px] text-white/80">{day.orders}</p>
                               </div>
                             </div>
                           </div>
@@ -338,6 +414,96 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+
+      {/* Sale Detail Dialog */}
+      <Dialog open={!!selectedSale} onOpenChange={(open) => { if (!open) { setSelectedSale(null); setSaleDetail(null) } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-primary" />
+              Sale #{selectedSale?.id} Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Info Row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-muted/30 rounded-lg p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <User className="w-3 h-3" /> Customer
+                  </div>
+                  <p className="text-sm font-medium">{selectedSale?.customer_name || 'Walk-in'}</p>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <CreditCard className="w-3 h-3" /> Payment
+                  </div>
+                  <p className="text-sm font-medium capitalize">{saleDetail?.sale?.payment_method || selectedSale?.payment_method || '—'}</p>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="w-3 h-3" /> Time
+                  </div>
+                  <p className="text-sm font-medium">{selectedSale?.sale_date ? new Date(selectedSale.sale_date).toLocaleString() : '—'}</p>
+                </div>
+                <div className="bg-muted/30 rounded-lg p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <DollarSign className="w-3 h-3" /> Total
+                  </div>
+                  <p className="text-sm font-bold text-accent">Rs. {parseFloat(selectedSale?.grand_total || 0).toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Items Purchased</p>
+                {saleDetail?.items?.length > 0 ? (
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/40">
+                        <tr>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Product</th>
+                          <th className="text-center px-3 py-2 text-xs font-medium text-muted-foreground">Qty</th>
+                          <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {saleDetail.items.map((item: any, idx: number) => (
+                          <tr key={idx} className="border-t border-border/50">
+                            <td className="px-3 py-2 font-medium truncate max-w-[150px]">{item.product_name}</td>
+                            <td className="px-3 py-2 text-center text-muted-foreground">{item.quantity}</td>
+                            <td className="px-3 py-2 text-right text-accent font-semibold">Rs. {parseFloat(item.price).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No item details available</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!detailLoading && (
+            <DialogFooter>
+              <Button
+                onClick={printReceipt}
+                className="w-full gap-2 bg-primary hover:bg-primary/90"
+              >
+                <Printer className="w-4 h-4" />
+                Print Receipt
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
     </ProtectedRoute>
   )
 }

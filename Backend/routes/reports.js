@@ -252,4 +252,46 @@ router.get('/daily-sales', async (req, res) => {
   }
 });
 
+// ===============================
+// 📦 EXPORT DETAILED DATA
+// ===============================
+router.get('/export-detail', async (req, res) => {
+  try {
+    const { period = 'week' } = req.query;
+
+    let dateCondition = 's.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)';
+    if (period === 'today') dateCondition = 'DATE(s.created_at) = CURDATE()';
+    else if (period === 'month') dateCondition = 's.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+    else if (period === 'year') dateCondition = 's.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)';
+    else if (period === 'all') dateCondition = '1=1';
+
+    const [rows] = await db.query(`
+      SELECT
+        s.id AS sale_id,
+        DATE_FORMAT(s.created_at, '%Y-%m-%d %H:%i') AS date,
+        IFNULL(c.name, 'Walk-in') AS customer_name,
+        IFNULL(c.phone, '-') AS customer_phone,
+        p.name AS product_name,
+        p.category AS product_category,
+        si.quantity,
+        si.price AS unit_price,
+        (si.quantity * si.price) AS item_total,
+        s.payment_method,
+        s.final_total AS order_total,
+        s.status
+      FROM sales s
+      LEFT JOIN customers c ON s.customer_id = c.id
+      JOIN sale_items si ON s.id = si.sale_id
+      JOIN products p ON si.product_id = p.id
+      WHERE ${dateCondition}
+      ORDER BY s.id DESC
+    `);
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Export failed" });
+  }
+});
+
 module.exports = router;

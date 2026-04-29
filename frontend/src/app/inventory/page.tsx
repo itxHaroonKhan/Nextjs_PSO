@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search, Plus, Edit, Trash2, AlertTriangle, Package, TrendingUp, TrendingDown, PackagePlus, Upload, Download, X, Loader2 } from "lucide-react"
+import { Search, Plus, Edit, Trash2, AlertTriangle, Package, TrendingUp, TrendingDown, PackagePlus, Upload, Download, X, Loader2, ChevronDown } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,6 +46,106 @@ interface Product {
   image?: string
 }
 
+function ComboInput({ value, onChange, options, placeholder }: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder?: string
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [query, setQuery] = React.useState("")
+  const [isFocused, setIsFocused] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  // When focused: show query (search text), else show actual value
+  const displayValue = isFocused ? query : (value || "")
+
+  // Filter based on query when focused, show all when query is empty
+  const filtered = query.trim() === ""
+    ? options
+    : options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
+
+  // Close on outside click
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setIsFocused(false)
+        setQuery("")
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  const handleFocus = () => {
+    setIsFocused(true)
+    setQuery("")        // clear search so full list shows
+    setOpen(true)
+    // select all text so user can immediately type to replace
+    setTimeout(() => inputRef.current?.select(), 0)
+  }
+
+  const handleInput = (val: string) => {
+    setQuery(val)
+    setOpen(true)
+    // if user clears input, also clear the value
+    if (val === "") onChange("")
+  }
+
+  const handleSelect = (opt: string) => {
+    onChange(opt)
+    setQuery("")
+    setIsFocused(false)
+    setOpen(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") { setOpen(false); setIsFocused(false); setQuery("") }
+    if (e.key === "Enter" && filtered.length === 1) { handleSelect(filtered[0]); e.preventDefault() }
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex">
+        <Input
+          ref={inputRef}
+          value={displayValue}
+          onChange={e => handleInput(e.target.value)}
+          onFocus={handleFocus}
+          onKeyDown={handleKeyDown}
+          placeholder={isFocused ? "Search or type..." : placeholder}
+          className="rounded-r-none border-r-0 combo-field"
+        />
+        <button
+          type="button"
+          onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
+          className="border border-white rounded-r-md px-2.5 bg-background hover:bg-accent/10 transition-colors flex items-center"
+        >
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+          {filtered.length > 0 ? filtered.map(opt => (
+            <div
+              key={opt}
+              onMouseDown={() => handleSelect(opt)}
+              className={`combo-option px-3 py-2 text-sm cursor-pointer transition-all duration-150 ${opt === value ? "bg-accent/10 text-accent font-medium" : ""}`}
+            >
+              {opt}
+              {opt === value && <span className="float-right text-accent text-xs">✓</span>}
+            </div>
+          )) : (
+            <div className="px-3 py-2 text-sm text-muted-foreground italic">Press Enter to use "{query}"</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function InventoryPage() {
   const { toast } = useToast()
   const { t, isRTL } = useLanguage()
@@ -55,13 +155,6 @@ export default function InventoryPage() {
   const [selectedCategory, setSelectedCategory] = React.useState("All")
   const [isAddOpen, setIsAddOpen] = React.useState(false)
 
-  // Generate random SKU when dialog opens
-  React.useEffect(() => {
-    if (isAddOpen) {
-      const randomSku = "SKU-" + Math.random().toString(36).substring(2, 9).toUpperCase();
-      setNewProduct(prev => ({ ...prev, sku: randomSku }));
-    }
-  }, [isAddOpen]);
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null)
   const [restockingProduct, setRestockingProduct] = React.useState<Product | null>(null)
   const [restockQuantity, setRestockQuantity] = React.useState(0)
@@ -461,7 +554,7 @@ export default function InventoryPage() {
             disabled={isImporting}
             className="gap-2 flex-1 sm:flex-none"
           >
-            {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             <span>Bulk Import</span>
           </Button>
           <Button onClick={() => setIsAddOpen(true)} className="gap-2 flex-1 sm:flex-none">
@@ -574,7 +667,7 @@ export default function InventoryPage() {
               {/* Mobile Cards */}
               <div className="md:hidden space-y-4">
                 {filteredProducts.map((product) => (
-                  <div key={product.id} className="border rounded-lg p-4 space-y-3">
+                  <div key={product.id} className="border border-white rounded-lg p-4 space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <p className="font-semibold">{product.name}</p>
@@ -639,10 +732,12 @@ export default function InventoryPage() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="category">{t('inventory.category')}</Label>
-                <Input id="category" list="category-options" value={newProduct.category} onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })} placeholder="e.g. Electronics" />
-                <datalist id="category-options">
-                  {categories.filter(c => c !== "All").map(c => <option key={c} value={c} />)}
-                </datalist>
+                <ComboInput
+                  value={newProduct.category || ""}
+                  onChange={(value) => setNewProduct({ ...newProduct, category: value })}
+                  options={categories.filter(c => c !== "All")}
+                  placeholder="Select or type category"
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -666,23 +761,12 @@ export default function InventoryPage() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="unitType">Unit Type</Label>
-                <Select 
-                  value={newProduct.unitType || 'pcs'} 
-                  onValueChange={(value) => setNewProduct({ ...newProduct, unitType: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pcs">Pieces (pcs)</SelectItem>
-                    <SelectItem value="kg">Kilograms (kg)</SelectItem>
-                    <SelectItem value="g">Grams (g)</SelectItem>
-                    <SelectItem value="l">Liters (l)</SelectItem>
-                    <SelectItem value="ml">Milliliters (ml)</SelectItem>
-                    <SelectItem value="m">Meters (m)</SelectItem>
-                    <SelectItem value="box">Boxes</SelectItem>
-                  </SelectContent>
-                </Select>
+                <ComboInput
+                  value={newProduct.unitType || ""}
+                  onChange={(value) => setNewProduct({ ...newProduct, unitType: value })}
+                  options={["Pieces (pcs)", "Kilograms (kg)", "Grams (g)", "Liters (l)", "Milliliters (ml)", "Meters (m)", "Boxes (box)", "Dozen", "Pair"]}
+                  placeholder="Select or type unit"
+                />
               </div>
             </div>
 
@@ -690,15 +774,15 @@ export default function InventoryPage() {
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label>Product Image</Label>
-                <span className="text-[10px] text-muted-foreground font-medium bg-muted px-2 py-0.5 rounded-full border border-border">MAX 5MB</span>
+                <span className="text-[10px] text-muted-foreground font-medium bg-muted px-2 py-0.5 rounded-full border border-white">MAX 5MB</span>
               </div>
               {productImage ? (
-                <div className="relative w-32 h-32 rounded-lg overflow-hidden border-2 border-border">
+                <div className="relative w-32 h-32 rounded-lg overflow-hidden border-2 border-white">
                   <img src={productImage} alt="Product" className="w-full h-full object-cover" />
                   <button type="button" onClick={removeImage} className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1"><X className="w-4 h-4" /></button>
                 </div>
               ) : (
-                <div className="border-2 border-dashed border-border rounded-lg p-6 hover:border-primary/50 transition-colors cursor-pointer group">
+                <div className="border-2 border-dashed border-white rounded-lg p-6 hover:border-white/50 transition-colors cursor-pointer group">
                   <label htmlFor="product-image" className="cursor-pointer">
                     <div className="flex flex-col items-center gap-2">
                       <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -742,7 +826,19 @@ export default function InventoryPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Category</Label>
-                  <Input list="category-options" value={editingProduct.category ?? ""} onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })} />
+                  <Select
+                    value={editingProduct.category ?? ""}
+                    onValueChange={(value) => setEditingProduct({ ...editingProduct, category: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.filter(c => c !== "All").map(c => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -801,7 +897,7 @@ export default function InventoryPage() {
           </DialogHeader>
           {restockingProduct && (
             <div className="space-y-4">
-              <div className="p-4 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200">
+              <div className="p-4 bg-red-50 dark:bg-red-950 rounded-lg border border-white">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Current Stock</span>
                   <span className="text-2xl font-bold text-red-600">{restockingProduct.stock}</span>
@@ -811,7 +907,7 @@ export default function InventoryPage() {
                 <Label>Quick Restock Amounts</Label>
                 <div className="grid grid-cols-4 gap-2">
                   {quickRestockAmounts.map(amount => (
-                    <Button key={amount} variant="outline" size="sm" onClick={() => setRestockQuantity(amount)} className={restockQuantity === amount ? "border-green-600 bg-green-50 dark:bg-green-950" : ""}>{amount}</Button>
+                    <Button key={amount} variant="outline" size="sm" onClick={() => setRestockQuantity(amount)} className={restockQuantity === amount ? "border-white bg-green-50 dark:bg-green-950" : ""}>{amount}</Button>
                   ))}
                 </div>
               </div>
@@ -820,7 +916,7 @@ export default function InventoryPage() {
                 <Input type="number" value={restockQuantity} onChange={(e) => setRestockQuantity(parseInt(e.target.value) || 0)} className="text-lg" />
               </div>
               {restockQuantity > 0 && (
-                <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200">
+                <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-white">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">New Stock Will Be</span>
                     <span className="text-2xl font-bold text-green-600">{restockingProduct.stock + restockQuantity}</span>
@@ -839,11 +935,11 @@ export default function InventoryPage() {
       <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Upload className="w-5 h-5 text-primary" />{t('inventory.bulkImport')}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Download className="w-5 h-5 text-primary" />{t('inventory.bulkImport')}</DialogTitle>
             <DialogDescription>{t('inventory.importSuccessMsg')}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-6 py-4">
-            <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-muted rounded-xl bg-muted/10">
+            <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-white rounded-xl bg-muted/10">
               <Package className="w-10 h-10 text-muted-foreground mb-4 opacity-50" />
               <p className="text-sm text-center text-muted-foreground mb-6">
                 Please use our CSV template to ensure your product data is formatted correctly.
@@ -908,7 +1004,7 @@ export default function InventoryPage() {
           
           {importResult?.errors && importResult.errors.length > 0 && (
             <div className="space-y-4">
-              <Alert variant={importResult.success ? "default" : "destructive"} className={importResult.success ? "bg-orange-500/10 text-orange-600 border-orange-200" : "bg-destructive/10 text-destructive border-destructive/20"}>
+              <Alert variant={importResult.success ? "default" : "destructive"} className={importResult.success ? "bg-orange-500/10 text-orange-600 border-white" : "bg-destructive/10 text-destructive border-white/20"}>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>{importResult.success ? t('inventory.someRowsFailed') : t('inventory.errorsOccurred')}</AlertTitle>
                 <AlertDescription>
@@ -917,7 +1013,7 @@ export default function InventoryPage() {
               </Alert>
               
               <div className="text-sm font-medium">{t('inventory.errorDetails')}:</div>
-              <ScrollArea className="h-[200px] w-full rounded-md border p-4">
+              <ScrollArea className="h-[200px] w-full rounded-md border border-white p-4">
                 <ul className="space-y-2">
                   {importResult.errors.map((err, i) => (
                     <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">

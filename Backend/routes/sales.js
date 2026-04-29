@@ -6,20 +6,12 @@ const db = require('../db');
 const verifyToken = require('../middleware/authMiddleware');
 const checkRole = require('../middleware/roleMiddleware');
 
+
 // ===============================
 // CREATE SALE (Admin + Cashier)
 // ===============================
 router.post('/', verifyToken, checkRole(['admin', 'cashier']), async (req, res) => {
   const { customer_id: provided_id, items, discount = 0, payment_method, amount_paid, tax: frontendTax, customer_name, customer_phone } = req.body;
-
-  console.log('📥 Sale request received:', {
-    items: items?.length,
-    payment_method,
-    amount_paid,
-    customer_id: provided_id || 'Walk-in',
-    customer_name,
-    customer_phone
-  });
 
   if (!items || items.length === 0) {
     return res.status(400).json({
@@ -43,26 +35,37 @@ router.post('/', verifyToken, checkRole(['admin', 'cashier']), async (req, res) 
 
     let customer_id = provided_id;
 
-    // ✅ Auto-create/find customer if name provided
     if (customer_name && !customer_id) {
-      // Check if customer exists with this phone (if provided)
       if (customer_phone) {
+        // Name + Phone → phone se dhundo ya naya banao
         const [existing] = await connection.query(
-          "SELECT id FROM customers WHERE phone = ?",
-          [customer_phone]
+          "SELECT id FROM customers WHERE phone = ?", [customer_phone]
         );
         if (existing.length > 0) {
           customer_id = existing[0].id;
+          await connection.query("UPDATE customers SET name = ? WHERE id = ?", [customer_name, customer_id]);
+        } else {
+          const [newCustomer] = await connection.query(
+            "INSERT INTO customers (name, phone, created_at) VALUES (?, ?, NOW())",
+            [customer_name, customer_phone]
+          );
+          customer_id = newCustomer.insertId;
         }
-      }
-
-      // If still no ID, create new customer
-      if (!customer_id) {
-        const [newCustomer] = await connection.query(
-          "INSERT INTO customers (name, phone, created_at) VALUES (?, ?, NOW())",
-          [customer_name, customer_phone || null]
+      } else {
+        // Sirf Name → customers table mein save karo (phone null), UI mein filter se chhupaayenge
+        const [existing] = await connection.query(
+          "SELECT id FROM customers WHERE name = ? AND (phone IS NULL OR phone = '') LIMIT 1",
+          [customer_name]
         );
-        customer_id = newCustomer.insertId;
+        if (existing.length > 0) {
+          customer_id = existing[0].id;
+        } else {
+          const [newCustomer] = await connection.query(
+            "INSERT INTO customers (name, created_at) VALUES (?, NOW())",
+            [customer_name]
+          );
+          customer_id = newCustomer.insertId;
+        }
       }
     }
 
@@ -78,7 +81,7 @@ router.post('/', verifyToken, checkRole(['admin', 'cashier']), async (req, res) 
     // trust the amount_paid 
     const final_total = amount_paid;
 
-    // ✅ Insert Sale (handle null customer_id)
+    // ✅ Insert Sale
     const [saleResult] = await connection.query(
       `INSERT INTO sales
       (customer_id, total, discount, tax, final_total, payment_method, created_at)

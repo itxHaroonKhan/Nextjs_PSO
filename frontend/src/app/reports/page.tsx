@@ -97,63 +97,104 @@ export default function ReportsPage() {
               <SelectItem value="year">{t('reports.thisYear')}</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="gap-2 flex-shrink-0" onClick={() => {
-            if (!salesData || salesData.length === 0) return;
-            
-            // Generate Excel-compatible HTML Table
-            let html = `
-              <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-              <head>
-                <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
-                <style>
-                  table { border-collapse: collapse; width: 100%; }
-                  th { background-color: #4CAF50; color: white; font-weight: bold; border: 1px solid #ddd; padding: 8px; }
-                  td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                  .header { font-size: 18px; font-weight: bold; margin-bottom: 20px; }
-                  .summary { margin-top: 20px; font-weight: bold; }
-                </style>
-              </head>
-              <body>
-                <div class="header">Sales Report - ${period.toUpperCase()}</div>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Revenue (PKR)</th>
-                      <th>Total Orders</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${salesData.map(row => {
-                      const dateObj = new Date(row.date);
-                      const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString() : '';
-                      return `
-                        <tr>
-                          <td>${dateStr}</td>
-                          <td>${parseFloat(row.revenue).toFixed(2)}</td>
-                          <td>${row.total_sales}</td>
-                        </tr>
-                      `;
-                    }).join('')}
-                  </tbody>
-                </table>
-                <div class="summary">
-                  <p>Total Revenue: Rs. ${totalSales.toLocaleString()}</p>
-                  <p>Total Orders: ${totalOrders}</p>
-                </div>
-              </body>
-              </html>
-            `;
+          <Button variant="outline" className="gap-2 flex-shrink-0" onClick={async () => {
+            try {
+              const res = await api.get(`/reports/export-detail?period=${period}`)
+              const rows = res.data.data
 
-            const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `sales_report_${period}_${new Date().toISOString().split('T')[0]}.xls`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+              if (!rows || rows.length === 0) return
+
+              // Totals calculate karo
+              const uniqueOrders = new Set(rows.map((r: any) => r.sale_id)).size
+              const totalRevenue = [...new Set(rows.map((r: any) => r.sale_id))].reduce((sum: number, saleId) => {
+                const row = rows.find((r: any) => r.sale_id === saleId)
+                return sum + (parseFloat(row.order_total) || 0)
+              }, 0)
+              const totalItemsSold = rows.reduce((sum: number, r: any) => sum + (parseInt(r.quantity) || 0), 0)
+
+              const html = `
+                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+                <head>
+                  <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+                  <style>
+                    table { border-collapse: collapse; width: 100%; }
+                    th { background-color: #4CAF50; color: white; font-weight: bold; border: 1px solid #ddd; padding: 8px; }
+                    td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    .header { font-size: 18px; font-weight: bold; margin-bottom: 20px; }
+                    .total-row { background-color: #f0f0f0; font-weight: bold; }
+                    .grand-total-row { background-color: #4CAF50; color: white; font-weight: bold; font-size: 14px; }
+                  </style>
+                </head>
+                <body>
+                  <div class="header">Sales Detail Report - ${period.toUpperCase()}</div>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Order ID</th>
+                        <th>Date</th>
+                        <th>Customer Name</th>
+                        <th>Customer Phone</th>
+                        <th>Product Name</th>
+                        <th>Category</th>
+                        <th>Qty</th>
+                        <th>Unit Price (Rs.)</th>
+                        <th>Item Total (Rs.)</th>
+                        <th>Order Total (Rs.)</th>
+                        <th>Payment Method</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${rows.map((row: any) => `
+                        <tr>
+                          <td>INV-${String(row.sale_id).padStart(6, '0')}</td>
+                          <td>${row.date}</td>
+                          <td>${row.customer_name}</td>
+                          <td>${row.customer_phone}</td>
+                          <td>${row.product_name}</td>
+                          <td>${row.product_category || '-'}</td>
+                          <td>${row.quantity}</td>
+                          <td>${parseFloat(row.unit_price).toFixed(2)}</td>
+                          <td>${parseFloat(row.item_total).toFixed(2)}</td>
+                          <td>${parseFloat(row.order_total).toFixed(2)}</td>
+                          <td>${row.payment_method}</td>
+                          <td>${row.status}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                    <tfoot>
+                      <tr class="total-row">
+                        <td colspan="6" style="text-align:right;">Total Items Sold:</td>
+                        <td>${totalItemsSold}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                      </tr>
+                      <tr class="grand-total-row">
+                        <td colspan="6" style="text-align:right;">Total Orders: ${uniqueOrders}</td>
+                        <td colspan="3"></td>
+                        <td colspan="3">Total Revenue: Rs. ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </body>
+                </html>
+              `
+
+              const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
+              const url = URL.createObjectURL(blob)
+              const link = document.createElement('a')
+              link.href = url
+              link.download = `sales_detail_${period}_${new Date().toISOString().split('T')[0]}.xls`
+              document.body.appendChild(link)
+              link.click()
+              document.body.removeChild(link)
+              URL.revokeObjectURL(url)
+            } catch (err) {
+              console.error('Export failed:', err)
+            }
           }}>
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">{t('reports.export')}</span>
@@ -213,7 +254,7 @@ export default function ReportsPage() {
             {salesData.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No sales data available</p>
             ) : (
-              <div className="rounded-md border">
+              <div className="rounded-md border border-white">
                 <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 font-medium text-sm">
                   <div>Day</div>
                   <div>Revenue</div>
@@ -256,7 +297,7 @@ export default function ReportsPage() {
                           className="w-full max-w-[50px] bg-gradient-to-t from-primary/80 to-primary rounded-t-lg transition-all duration-300 group-hover:from-primary group-hover:to-secondary cursor-pointer relative"
                           style={{ height: `${height}px` }}
                         >
-                          <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-card border border-border rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg whitespace-nowrap z-10">
+                          <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-card border border-white rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg whitespace-nowrap z-10">
                             <p className="text-xs font-bold text-white">Rs. {revenue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
                           </div>
                         </div>
@@ -293,7 +334,7 @@ export default function ReportsPage() {
                         const color = colors[index % colors.length]
                         const value = cat.value ? (parseFloat(cat.value) / totalSales) * 100 : 0
                         return (
-                          <div key={cat.name || index} className="group p-3 rounded-xl border border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all duration-300">
+                          <div key={cat.name || index} className="group p-3 rounded-xl border border-white/50 hover:border-white/30 hover:bg-primary/5 transition-all duration-300">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-3">
                                 <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center shadow-md group-hover:scale-110 transition-transform`}>
@@ -318,20 +359,20 @@ export default function ReportsPage() {
 
                 {/* Centered Revenue Box */}
                 <div className="flex justify-center">
-                  <div className="w-full max-w-3xl bg-gradient-to-br from-primary/5 to-secondary/5 rounded-2xl p-8 border border-primary/20 text-center shadow-inner">
-                    <p className="text-base text-muted-foreground mb-2">Total Revenue</p>
-                    <p className="text-5xl font-extrabold text-primary mb-2">Rs. {totalSales.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                  <div className="w-full max-w-sm bg-gradient-to-br from-primary/5 to-secondary/5 rounded-xl p-4 border border-white/20 text-center shadow-inner">
+                    <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
+                    <p className="text-2xl font-extrabold text-primary mb-1">Rs. {totalSales.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
                     {profitLoss && (
                       <>
-                        <Separator className="my-8 bg-primary/10" />
-                        <div className="grid grid-cols-2 gap-12">
-                          <div className="space-y-1">
-                            <p className="text-sm text-muted-foreground">Total Cost</p>
-                            <p className="text-3xl font-bold text-foreground">Rs. {(parseFloat(profitLoss.total_cost) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        <Separator className="my-3 bg-primary/10" />
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-0.5">
+                            <p className="text-xs text-muted-foreground">Total Cost</p>
+                            <p className="text-base font-bold text-foreground">Rs. {(parseFloat(profitLoss.total_cost) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
                           </div>
-                          <div className="space-y-1">
-                            <p className="text-sm text-muted-foreground">Net Profit</p>
-                            <p className="text-3xl font-bold text-green-600">Rs. {(parseFloat(profitLoss.gross_profit) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                          <div className="space-y-0.5">
+                            <p className="text-xs text-muted-foreground">Net Profit</p>
+                            <p className="text-base font-bold text-green-600">Rs. {(parseFloat(profitLoss.gross_profit) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
                           </div>
                         </div>
                       </>

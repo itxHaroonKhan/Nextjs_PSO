@@ -67,7 +67,7 @@ export default function POSPage() {
   const [cartItems, setCartItems] = React.useState<Record<string, number>>({})
   const [menuItems, setMenuItems] = React.useState<MenuItem[]>([])
   const [menuLoading, setMenuLoading] = React.useState(true)
-  const [orderNumber, setOrderNumber] = React.useState(`ORD-${Math.floor(1000 + Math.random() * 9000)}`)
+  const [orderNumber, setOrderNumber] = React.useState('------')
   const [showMobileCart, setShowMobileCart] = React.useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = React.useState<string>("Card")
   const [savedOrder, setSavedOrder] = React.useState<OrderData | null>(null)
@@ -288,16 +288,6 @@ export default function POSPage() {
         price: item.price,
       }))
 
-      console.log('🛒 Sending sale request:', {
-        items: saleItems,
-        payment_method: selectedPaymentMethod,
-        amount_paid: total,
-        discount: 0,
-        customer_name: customerData?.name,
-        customer_phone: customerData?.phone,
-      })
-
-      // Call backend API to create sale
       const response = await api.post('/sales', {
         items: saleItems,
         payment_method: selectedPaymentMethod,
@@ -307,9 +297,9 @@ export default function POSPage() {
         customer_phone: customerData?.phone,
       })
 
-      console.log('✅ Sale response:', response.data)
-
       if (response.data.success) {
+        const formattedOrderNumber = `INV-${String(response.data.sale_id).padStart(6, '0')}`
+
         // Pehle cart data save karo (clear hone se pehle!)
         const orderData: OrderData = {
           cart: [...cart],
@@ -318,18 +308,18 @@ export default function POSPage() {
           donation,
           total,
           paymentMethod: selectedPaymentMethod,
-          orderNumber,
+          orderNumber: formattedOrderNumber,
           customerName: customerData?.name,
           customerPhone: customerData?.phone,
         }
         setSavedOrder(orderData)
 
-        // Ab cart clear karo aur naya order number generate karo
+        // Ab cart clear karo aur order number next ke liye reset karo
         setCart([])
         setCartItems({})
         setDiscount(0)
         setShowMobileCart(false)
-        setOrderNumber(`ORD-${Math.floor(1000 + Math.random() * 9000)}`)
+        setOrderNumber('------')
 
         toast({
           title: t('msg.paymentSuccess'),
@@ -362,7 +352,7 @@ export default function POSPage() {
     <ProtectedRoute>
       <div className="h-[100dvh] w-full flex flex-col overflow-visible max-w-[100vw]" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Header - Optimized for 320px+ screens */}
-        <header className="bg-card border-b border-border px-2 xs:px-2.5 sm:px-4 md:px-6 py-2 xs:py-2.5 sm:py-3 flex-shrink-0 safe-top relative z-50">
+        <header className="bg-card border-b border-white px-2 xs:px-2.5 sm:px-4 md:px-6 py-2 xs:py-2.5 sm:py-3 flex-shrink-0 safe-top relative z-50">
         <div className="flex items-center justify-between gap-1.5 xs:gap-2 max-w-full overflow-x-visible">
           {/* Logo Section */}
           <div className="flex items-center gap-1.5 xs:gap-2 flex-shrink-0 min-w-0">
@@ -386,7 +376,7 @@ export default function POSPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={t('header.search')}
-                className="pl-10 h-10 text-sm border-border bg-muted/50 focus:bg-card focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-full text-foreground"
+                className="pl-10 h-10 text-sm border-white bg-muted/50 focus:bg-card focus:border-white focus:ring-2 focus:ring-white/20 rounded-full text-foreground"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -398,7 +388,7 @@ export default function POSPage() {
 
             {/* Mobile Cart Button */}
             <button
-              className="lg:hidden relative w-10 h-10 xs:w-11 xs:h-11 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors active:scale-95 border-2 border-primary/30"
+              className="lg:hidden relative w-10 h-10 xs:w-11 xs:h-11 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors active:scale-95 border-2 border-white/30"
               onClick={() => setShowMobileCart(!showMobileCart)}
               aria-label="Toggle cart"
             >
@@ -415,7 +405,7 @@ export default function POSPage() {
               onClick={() => toast({ title: "Notifications", description: "No new notifications right now." })}
             >
               <Bell className="w-4 h-4 text-muted-foreground" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-card animate-pulse" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white animate-pulse" />
             </button>
             <button 
               className="hidden md:flex w-9 h-9 rounded-full bg-muted hover:bg-muted/80 items-center justify-center transition-colors"
@@ -438,7 +428,7 @@ export default function POSPage() {
             <Search className="absolute left-2.5 xs:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 xs:h-4 xs:w-4 text-muted-foreground" />
             <Input
               placeholder={t('header.search.mobile')}
-              className="pl-9 xs:pl-10 h-8 xs:h-9 text-xs xs:text-sm border-border bg-muted/50 focus:bg-card focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-full text-foreground"
+              className="pl-9 xs:pl-10 h-8 xs:h-9 text-xs xs:text-sm border-white bg-muted/50 focus:bg-card focus:border-white focus:ring-2 focus:ring-white/20 rounded-full text-foreground"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -482,7 +472,7 @@ export default function POSPage() {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-2 xs:gap-3 sm:gap-4 p-2 xs:p-3 sm:p-4 pb-16 xs:pb-20 lg:pb-4 min-h-0 overflow-hidden relative">
         {/* Mobile Cart Placeholder Bar - Shows when cart is closed and has items */}
         {!showMobileCart && cart.length > 0 && (
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border shadow-2xl safe-bottom">
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-white shadow-2xl safe-bottom">
             <div
               className="flex items-center justify-between p-3 xs:p-4 cursor-pointer active:bg-muted/50 transition-colors"
               onClick={() => setShowMobileCart(true)}
@@ -513,7 +503,7 @@ export default function POSPage() {
         <div className={`lg:col-span-8 flex flex-col gap-2 xs:gap-3 sm:gap-4 min-h-0 ${showMobileCart ? 'hidden lg:flex' : 'flex'}`}>
 
           {/* Foodies Menu Section */}
-          <Card className="border border-border bg-card rounded-xl xs:rounded-2xl overflow-hidden shadow-xl flex-1 flex flex-col relative z-0">
+          <Card className="border border-white bg-card rounded-xl xs:rounded-2xl overflow-hidden shadow-xl flex-1 flex flex-col relative z-0">
             {/* Local Added Popup */}
             {showAddedPopup && (
               <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in zoom-in slide-in-from-top-4 duration-300">
@@ -525,7 +515,7 @@ export default function POSPage() {
                 </div>
               </div>
             )}
-            <CardHeader className="pb-2 xs:pb-3 border-b border-border flex-shrink-0">
+            <CardHeader className="pb-2 xs:pb-3 border-b border-white flex-shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm xs:text-base sm:text-lg font-bold text-foreground flex items-center gap-1.5 xs:gap-2">
                   <span className="text-base xs:text-lg sm:text-xl">🍕</span>
@@ -544,7 +534,7 @@ export default function POSPage() {
                     className={`flex-shrink-0 snap-start px-3 xs:px-3.5 sm:px-4 py-2 xs:py-2.5 sm:py-3 rounded-lg xs:rounded-xl border-2 transition-all min-w-[80px] xs:min-w-[85px] sm:min-w-[100px] active:scale-95 touch-manipulation ${
                       selectedCategory === cat.id
                         ? `bg-gradient-to-r ${cat.color} border-transparent text-white shadow-lg scale-105`
-                        : 'bg-card border-border text-muted-foreground hover:border-primary'
+                        : 'bg-card border-white text-muted-foreground hover:border-white'
                     }`}
                   >
                     <p className={`font-semibold text-[10px] xs:text-[11px] sm:text-sm whitespace-nowrap ${selectedCategory === cat.id ? 'text-white' : 'text-foreground'}`}>{cat.nameKey ? t(cat.nameKey as any) : cat.name}</p>
@@ -557,7 +547,7 @@ export default function POSPage() {
               <ScrollArea className="flex-1 min-h-0 scrollbar-thin relative z-[1]">
                 {menuLoading ? (
                   <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
                   </div>
                 ) : menuItems.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
@@ -574,10 +564,10 @@ export default function POSPage() {
                         key={product.id}
                         className={`group relative flex flex-col text-left p-1.5 xs:p-2 sm:p-2.5 md:p-3 rounded-lg xs:rounded-xl border-2 transition-all duration-300 overflow-hidden ${
                           isOutOfStock
-                            ? 'opacity-60 border-border cursor-not-allowed'
+                            ? 'opacity-60 border-white cursor-not-allowed'
                             : quantity > 0
-                              ? 'border-primary bg-primary/10 shadow-md'
-                              : 'border-border hover:border-primary bg-card hover:shadow-lg'
+                              ? 'border-white bg-primary/10 shadow-md'
+                              : 'border-white hover:border-white bg-card hover:shadow-lg'
                         }`}
                         style={{ zIndex: 1, wordBreak: 'break-word' }}
                       >
@@ -620,7 +610,7 @@ export default function POSPage() {
                                   <Plus className="w-3.5 h-3.5 xs:w-4 xs:h-4 text-white" />
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-0.5 xs:gap-1 bg-card rounded-full shadow-md border-2 border-primary flex-shrink-0">
+                                <div className="flex items-center gap-0.5 xs:gap-1 bg-card rounded-full shadow-md border-2 border-white flex-shrink-0">
                                   <div
                                     onClick={(e) => { e.stopPropagation(); updateQuantity(product.id.toString(), -1) }}
                                     className="w-6 h-6 xs:w-7 xs:h-7 rounded-full hover:bg-primary/10 flex items-center justify-center transition-colors cursor-pointer active:scale-90"
@@ -654,13 +644,13 @@ export default function POSPage() {
         </div>
 
         {/* Cart / Order Summary Sidebar */}
-        <Card className={`lg:col-span-4 flex flex-col shadow-2xl border border-border overflow-hidden bg-card rounded-xl xs:rounded-2xl z-50 ${
+        <Card className={`lg:col-span-4 flex flex-col shadow-2xl border border-white overflow-hidden bg-card rounded-xl xs:rounded-2xl z-50 ${
           showMobileCart
             ? 'fixed inset-0 z-[9999] lg:static lg:z-auto m-0 rounded-none lg:rounded-2xl safe-bottom flex-col'
             : 'hidden lg:flex'
         }`}>
           {/* Mobile Close Button */}
-          <div className="lg:hidden flex justify-end p-2 border-b border-border">
+          <div className="lg:hidden flex justify-end p-2 border-b border-white">
             <button
               onClick={() => setShowMobileCart(false)}
               className="w-9 h-9 rounded-full bg-muted hover:bg-muted/80 flex items-center justify-center touch-target-sm active:scale-90"
@@ -671,7 +661,7 @@ export default function POSPage() {
               </svg>
             </button>
           </div>
-          <div className="p-2 xs:p-3 md:p-4 border-b border-border flex-shrink-0">
+          <div className="p-2 xs:p-3 md:p-4 border-b border-white flex-shrink-0">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm xs:text-base md:text-lg font-semibold text-foreground truncate">{t('cart.title')}</h3>
               <div className="flex gap-1.5 xs:gap-2 flex-shrink-0">
@@ -708,7 +698,24 @@ export default function POSPage() {
                     <div key={item.id} className="flex justify-between items-center bg-muted/50 p-2 xs:p-2.5 sm:p-3 rounded-lg xs:rounded-xl">
                       <div className="flex-1 min-w-0 mr-1.5 xs:mr-2">
                         <p className="font-medium text-xs xs:text-xs md:text-sm text-foreground truncate">{item.name}</p>
-                        <p className="text-[10px] xs:text-[10px] md:text-xs text-muted-foreground">Qty: {item.quantity}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1 bg-card rounded-full shadow-sm border border-white">
+                            <button
+                              onClick={() => updateQuantity(item.id, -1)}
+                              className="w-6 h-6 rounded-full hover:bg-primary/10 flex items-center justify-center transition-colors active:scale-90"
+                            >
+                              <Minus className="w-2.5 h-2.5 text-primary" />
+                            </button>
+                            <span className="w-4 text-center text-[10px] font-bold text-foreground">{item.quantity}</span>
+                            <button
+                              onClick={() => updateQuantity(item.id, 1)}
+                              className="w-6 h-6 rounded-full hover:bg-primary/10 flex items-center justify-center transition-colors active:scale-90"
+                            >
+                              <Plus className="w-2.5 h-2.5 text-primary" />
+                            </button>
+                          </div>
+                          <p className="text-[10px] md:text-xs text-muted-foreground">x Rs. {item.price.toFixed(2)}</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5 xs:gap-2 flex-shrink-0">
                         <span className="font-bold text-primary text-xs xs:text-xs md:text-sm">Rs. {(item.price * item.quantity).toFixed(2)}</span>
@@ -727,7 +734,7 @@ export default function POSPage() {
             </ScrollArea>
 
             {/* Payment Summary */}
-            <div className="mt-3 xs:mt-4 pt-3 xs:pt-4 border-t border-border flex-shrink-0">
+            <div className="mt-3 xs:mt-4 pt-3 xs:pt-4 border-t border-white flex-shrink-0">
               <h4 className="font-semibold text-xs xs:text-sm md:text-base text-foreground mb-2 xs:mb-3">{t('payment.summary')}</h4>
               <div className="space-y-1.5 xs:space-y-2 text-xs">
                 <div className="flex justify-between">
@@ -751,7 +758,7 @@ export default function POSPage() {
             </div>
           </CardContent>
 
-          <CardFooter className="flex-col bg-muted/30 p-2 xs:p-3 md:p-4 space-y-2 xs:space-y-2.5 sm:space-y-3 border-t border-border flex-shrink-0 safe-bottom">
+          <CardFooter className="flex-col bg-muted/30 p-2 xs:p-3 md:p-4 space-y-2 xs:space-y-2.5 sm:space-y-3 border-t border-white flex-shrink-0 safe-bottom">
             {/* Action Buttons */}
             <div className="grid grid-cols-3 gap-1.5 xs:gap-2 w-full">
               <Button

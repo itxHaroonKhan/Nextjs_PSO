@@ -36,13 +36,23 @@ export default function SignupPage() {
     { id: 'settings', label: 'Settings' }
   ]
 
+  const passwordRules = [
+    { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
+    { label: "One uppercase letter (A-Z)", test: (p: string) => /[A-Z]/.test(p) },
+    { label: "One lowercase letter (a-z)", test: (p: string) => /[a-z]/.test(p) },
+    { label: "One number (0-9)", test: (p: string) => /[0-9]/.test(p) },
+    { label: "One symbol (!@#$%^&*)", test: (p: string) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(p) },
+  ]
+
+  const isEmailValid = (email: string) => /^[^\s@]+@[^\s@]+\.(com|org)$/i.test(email)
+
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const handlePermissionChange = (permissionId: string, checked: boolean) => {
     setFormData(prev => {
-      const newPermissions = checked 
+      const newPermissions = checked
         ? [...prev.permissions, permissionId]
         : prev.permissions.filter(p => p !== permissionId)
       return { ...prev, permissions: newPermissions }
@@ -52,21 +62,32 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate passwords match
-    if (formData.password !== formData.confirmPassword) {
+    // Validate email domain
+    if (!isEmailValid(formData.email)) {
       toast({
-        title: "Validation Error",
-        description: "Passwords do not match",
+        title: "Invalid Email",
+        description: "Email must end with .com or .org (e.g. user@example.com)",
         variant: "destructive"
       })
       return
     }
 
-    // Validate password length
-    if (formData.password.length < 6) {
+    // Validate all password rules
+    const failedRule = passwordRules.find(r => !r.test(formData.password))
+    if (failedRule) {
+      toast({
+        title: "Weak Password",
+        description: `Password requirement not met: ${failedRule.label}`,
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Validate passwords match
+    if (formData.password !== formData.confirmPassword) {
       toast({
         title: "Validation Error",
-        description: "Password must be at least 6 characters",
+        description: "Passwords do not match",
         variant: "destructive"
       })
       return
@@ -200,7 +221,7 @@ export default function SignupPage() {
               <Label htmlFor="role">Role</Label>
               <select
                 id="role"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
+                className="flex h-10 w-full rounded-md border border-white bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
                 value={formData.role}
                 onChange={(e) => handleChange("role", e.target.value)}
                 disabled={isLoading}
@@ -216,7 +237,7 @@ export default function SignupPage() {
                 <CheckCircle2 className="w-4 h-4 text-primary" />
                 Page Permissions
               </Label>
-              <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-xl border border-border">
+              <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-xl border border-white">
                 {permissionsList.map((permission) => (
                   <div key={permission.id} className="flex items-center space-x-2">
                     <Checkbox 
@@ -263,6 +284,24 @@ export default function SignupPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
+              {/* Password Requirements */}
+              {formData.password.length > 0 && (
+                <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-1.5">
+                  {passwordRules.map((rule) => {
+                    const passed = rule.test(formData.password)
+                    return (
+                      <div key={rule.label} className="flex items-center gap-2 text-xs">
+                        <span className={passed ? "text-green-500" : "text-destructive"}>
+                          {passed ? "✓" : "✗"}
+                        </span>
+                        <span className={passed ? "text-green-500" : "text-muted-foreground"}>
+                          {rule.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Confirm Password */}

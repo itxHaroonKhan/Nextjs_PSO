@@ -160,41 +160,4 @@ router.put('/store', verifyToken, checkRole(['admin']), async (req, res) => {
   }
 });
 
-// ===============================
-// RESET DASHBOARD DATA (Admin ONLY)
-// ===============================
-router.post('/reset-data', verifyToken, checkRole(['admin']), async (req, res) => {
-  const connection = await db.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    // 1. Clear sale items first (Foreign Key constraint)
-    await connection.query("DELETE FROM sale_items");
-    
-    // 2. Clear sales
-    await connection.query("DELETE FROM sales");
-
-    // Optional: Reset auto-increment
-    await connection.query("ALTER TABLE sale_items AUTO_INCREMENT = 1");
-    await connection.query("ALTER TABLE sales AUTO_INCREMENT = 1");
-
-    await connection.commit();
-
-    res.json({
-      success: true,
-      message: "All sales data has been reset to zero successfully."
-    });
-
-  } catch (err) {
-    await connection.rollback();
-    console.error('❌ Reset error:', err);
-    res.status(500).json({
-      success: false,
-      message: "Failed to reset sales data"
-    });
-  } finally {
-    connection.release();
-  }
-});
-
 module.exports = router;

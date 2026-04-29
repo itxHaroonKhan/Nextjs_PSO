@@ -43,7 +43,7 @@ export function ReceiptPrintDialog({
   discount,
   total,
   paymentMethod = "Card",
-  orderNumber = "F0030",
+  orderNumber = "------",
   tableNumber = "04",
   customerName,
   customerPhone,

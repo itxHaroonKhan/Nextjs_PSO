@@ -214,8 +214,6 @@ router.post('/', checkRole(['admin']), async (req, res) => {
       }
     }
 
-    console.log('📦 Attempting to create product:', { name, sellingPrice, costPrice, stockQty });
-
     try {
       const [result] = await db.query(
         `INSERT INTO products 

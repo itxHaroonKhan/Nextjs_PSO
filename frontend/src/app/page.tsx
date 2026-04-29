@@ -13,7 +13,7 @@ export default function HomePage() {
       <div className="flex flex-col items-center gap-4">
         {isLoading ? (
           <>
-            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-muted-foreground">Initializing...</p>
           </>
         ) : (

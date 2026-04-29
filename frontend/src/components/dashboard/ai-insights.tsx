@@ -6,20 +6,46 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import api from "@/lib/api"
 
-export function AIInsights() {
+interface AIInsightsProps {
+  data?: {
+    stats: any;
+    recentSales: any[];
+    topCategories: any[];
+  }
+}
+
+export function AIInsights({ data: providedData }: AIInsightsProps) {
   const [insight, setInsight] = React.useState<string>("")
   const [loading, setLoading] = React.useState(true)
-  const [stats, setStats] = React.useState<any>(null)
+  const [stats, setStats] = React.useState<any>(providedData?.stats || null)
 
   React.useEffect(() => {
     const fetchAIInsights = async () => {
       try {
         setLoading(true)
-        // Fetch real data from dashboard to feed into AI
-        const result = await api.get('/dashboard/all')
-        const dashboardData = result.data.data
-        const { stats: statsData, recentSales, topCategories } = dashboardData
-        setStats(statsData)
+        
+        let statsData, recentSales, topCategories;
+
+        if (providedData) {
+          statsData = providedData.stats;
+          recentSales = providedData.recentSales;
+          topCategories = providedData.topCategories;
+          setStats(statsData);
+        } else {
+          // Fallback if data not provided
+          const result = await api.get('/dashboard/all')
+          const dashboardData = result.data.data
+          statsData = dashboardData.stats;
+          recentSales = dashboardData.recentSales;
+          topCategories = dashboardData.topCategories;
+          setStats(statsData)
+        }
+
+        if (!statsData) {
+          setInsight("System is running smoothly. Stock levels and sales trends are within normal parameters.");
+          setLoading(false);
+          return;
+        }
 
         const prompt = `
           As a POS System Business Analyst, provide a very concise (2-3 sentences) summary of the current business state based on this data:

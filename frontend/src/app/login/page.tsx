@@ -44,6 +44,8 @@ export default function LoginPage() {
     return () => clearInterval(interval);
   }, [lockoutUntil]);
 
+  const isEmailValid = (email: string) => /^[^\s@]+@[^\s@]+\.(com|org)$/i.test(email)
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (lockoutUntil) return;
@@ -57,6 +59,16 @@ export default function LoginPage() {
         toast({
           title: "Validation Error",
           description: "Email and password are required",
+          variant: "destructive"
+        })
+        setIsLoading(false)
+        return
+      }
+
+      if (!isEmailValid(trimmedEmail)) {
+        toast({
+          title: "Invalid Email",
+          description: "Email must end with .com or .org (e.g. user@example.com)",
           variant: "destructive"
         })
         setIsLoading(false)
@@ -113,9 +125,6 @@ export default function LoginPage() {
         })
       }
     } catch (error: any) {
-      console.warn('Login attempt unsuccessful:', error.response?.data?.message || error.message)
-      
-      // Also check for lockout in error response if any
       if (error.response?.data?.lockUntil) {
         setLockoutUntil(error.response.data.lockUntil);
       }
@@ -148,7 +157,7 @@ export default function LoginPage() {
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
             {lockoutUntil && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive rounded-lg p-3 text-sm text-center font-medium animate-pulse">
+              <div className="bg-destructive/10 border border-white/20 text-destructive rounded-lg p-3 text-sm text-center font-medium animate-pulse">
                 Account locked. Try again in {timeLeft}
               </div>
             )}
